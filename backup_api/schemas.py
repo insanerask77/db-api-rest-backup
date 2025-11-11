@@ -12,10 +12,12 @@ class DatabaseCreate(BaseModel):
     database_name: str
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
+    max_backups: Optional[int] = None
 
 class DatabaseUpdate(BaseModel):
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
+    max_backups: Optional[int] = None
 
 class DatabaseInfo(BaseModel):
     id: str

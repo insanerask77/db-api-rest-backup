@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from sqlmodel import Session
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from . import config
 from .database import create_db_and_tables, engine
-from .scheduler import scheduler, schedule_database_backups, schedule_retention_policy
+from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs
 from .routers import databases, backups
 import logging
 
@@ -10,6 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+Instrumentator().instrument(app).expose(app)
 
 @app.on_event("startup")
 def startup_event():
@@ -19,7 +22,7 @@ def startup_event():
 
     scheduler.start()
     schedule_database_backups()
-    schedule_retention_policy()
+    schedule_system_jobs()
 
 @app.on_event("shutdown")
 def shutdown_event():

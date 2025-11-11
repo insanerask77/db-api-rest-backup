@@ -14,6 +14,7 @@ class Database(SQLModel, table=True):
     database_name: str
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
+    max_backups: Optional[int] = None
 
 class Backup(SQLModel, table=True):
     id: str = Field(default_factory=lambda: f"bkp_{uuid.uuid4().hex[:6]}", primary_key=True)

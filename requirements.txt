@@ -4,3 +4,5 @@ pydantic
 apscheduler
 sqlmodel
 pyyaml
+prometheus-fastapi-instrumentator
+psutil

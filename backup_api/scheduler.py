@@ -3,14 +3,21 @@ from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timedelta
 import os
 import logging
+import psutil
 from sqlmodel import Session, select
 from .models import Database, Backup
-from .backup_manager import run_backup
+from .backup_manager import run_backup, STORAGE_DIR
 from .database import engine
+from .metrics import DISK_SPACE_AVAILABLE_BYTES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
+
+def update_disk_space_metric():
+    if os.path.exists(STORAGE_DIR):
+        disk_usage = psutil.disk_usage(STORAGE_DIR)
+        DISK_SPACE_AVAILABLE_BYTES.set(disk_usage.free)
 
 def trigger_scheduled_backup(db_id: str):
     with Session(engine) as session:
@@ -46,33 +53,68 @@ def enforce_retention():
     with Session(engine) as session:
         logger.info("Running retention policy enforcement...")
         now = datetime.utcnow()
-        databases = {db.id: db for db in session.exec(select(Database)).all()}
+        databases = session.exec(select(Database)).all()
 
-        backups_to_delete = session.exec(select(Backup).where(Backup.status == "completed")).all()
-
-        for backup in backups_to_delete:
-            db = databases.get(backup.database_id)
-            if db and db.retention_days is not None:
+        for db in databases:
+            # Time-based retention
+            if db.retention_days is not None:
                 retention_delta = timedelta(days=db.retention_days)
-                if now - backup.finished_at > retention_delta:
+                cutoff_date = now - retention_delta
+
+                backups_to_delete = session.exec(
+                    select(Backup).where(
+                        Backup.database_id == db.id,
+                        Backup.status == "completed",
+                        Backup.finished_at < cutoff_date
+                    )
+                ).all()
+
+                for backup in backups_to_delete:
                     try:
                         if backup.storage_path and os.path.exists(backup.storage_path):
                             os.remove(backup.storage_path)
                         session.delete(backup)
-                        logger.info(f"Deleted old backup '{backup.id}' for database '{db.name}'.")
+                        logger.info(f"Deleted old backup '{backup.id}' for database '{db.name}' due to time policy.")
                     except Exception as e:
                         logger.error(f"Error deleting backup file for '{backup.id}': {e}")
-        session.commit()
 
-def schedule_retention_policy():
-    job_id = "retention_policy_job"
-    if not scheduler.get_job(job_id):
-        scheduler.add_job(
-            enforce_retention,
-            trigger="cron",
-            hour=1,
-            id=job_id,
-            name="Enforce Retention Policies",
-            replace_existing=True,
-        )
-        logger.info("Scheduled daily retention policy job.")
+            # Count-based retention
+            if db.max_backups is not None:
+                all_backups = session.exec(
+                    select(Backup).where(
+                        Backup.database_id == db.id,
+                        Backup.status == "completed"
+                    ).order_by(Backup.finished_at.desc())
+                ).all()
+
+                if len(all_backups) > db.max_backups:
+                    backups_to_delete = all_backups[db.max_backups:]
+                    for backup in backups_to_delete:
+                        try:
+                            if backup.storage_path and os.path.exists(backup.storage_path):
+                                os.remove(backup.storage_path)
+                            session.delete(backup)
+                            logger.info(f"Deleted old backup '{backup.id}' for database '{db.name}' due to count policy.")
+                        except Exception as e:
+                            logger.error(f"Error deleting backup file for '{backup.id}': {e}")
+
+            session.commit()
+
+def schedule_system_jobs():
+    scheduler.add_job(
+        enforce_retention,
+        trigger="cron",
+        hour=1,
+        id="retention_policy_job",
+        name="Enforce Retention Policies",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        update_disk_space_metric,
+        trigger="interval",
+        minutes=5,
+        id="disk_space_metric_job",
+        name="Update Disk Space Metric",
+        replace_existing=True,
+    )
+    logger.info("Scheduled system jobs (retention and metrics).")

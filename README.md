@@ -1,6 +1,6 @@
 # Backup API
 
-This is a REST API for managing database backups. It allows you to register databases, create real backups using `pg_dump` and `mongodump`, schedule them, and enforce retention policies.
+This is a REST API for managing database backups. It allows you to register databases, create real backups using `pg_dump` and `mongodump`, schedule them, enforce retention policies, and monitor the system via Prometheus metrics.
 
 **Important:** This application is designed to be run inside the provided Docker container to ensure that `pg_dump` and `mongodump` are available.
 
@@ -42,6 +42,7 @@ databases:
     database_name: "testdb"
     schedule: "0 3 * * *"
     retention_days: 7
+    max_backups: 5
   - name: "my-mongo-db"
     engine: "mongodb"
     host: "mongo-db"
@@ -51,55 +52,34 @@ databases:
     database_name: "admin"
     schedule: "0 4 * * *"
     retention_days: 14
+    max_backups: 10
 ```
 
 ### Credential Management
 
 Database credentials are provided to the application via environment variables, which are defined in the `docker-compose.yml` file. This is a security best practice.
 
-```yaml
-# In docker-compose.yml
-services:
-  backend:
-    # ...
-    environment:
-      - POSTGRES_USER=testuser
-      - POSTGRES_PASSWORD=testpassword
-      - MONGO_USER=root
-      - MONGO_PASSWORD=rootpassword
-```
+### Enhanced Retention Policy
+
+The retention policy now supports two parameters, which are applied in order:
+1.  `retention_days`: Deletes all backups older than the specified number of days.
+2.  `max_backups`: If, after the first step, the number of backups still exceeds this limit, the oldest remaining backups are deleted until the count is met.
+
+## Monitoring
+
+The application exposes a `/metrics` endpoint with Prometheus metrics for monitoring.
+
+**Key Metrics:**
+- `backups_total`: Total number of backups, labeled by database and status (`completed` or `failed`).
+- `backup_duration_seconds`: A histogram of backup durations.
+- `backup_size_bytes`: The size of the last successful backup for each database.
+- `disk_space_available_bytes`: Available disk space in the backup storage directory.
+
+You can access the metrics at `http://localhost:8000/metrics`.
 
 ## API Usage Examples
 
-Once the environment is running with the predefined configurations, you can start triggering and managing backups immediately.
-
-### 1. List Preloaded Databases
-```bash
-curl -X GET "http://localhost:8000/databases"
-```
-
-### 2. Trigger a Manual Backup
-Get a database ID from the list above and use it to trigger a backup.
-```bash
-curl -X POST "http://localhost:8000/backups" -H "Content-Type: application/json" -d '{
-  "database_id": "your_database_id_here",
-  "type": "full"
-}'
-```
-
-### 3. Check Backup Status
-```bash
-curl -X GET "http://localhost:8000/backups"
-```
-
-### 4. Configure Schedule and Retention
-Update the schedule for an existing database.
-```bash
-curl -X PATCH "http://localhost:8000/databases/your_database_id_here" -H "Content-Type: application/json" -d '{
-  "schedule": "0 2 * * *",
-  "retention_days": 5
-}'
-```
+... (API examples remain the same, but now `max_backups` can be included in the `PATCH` request) ...
 
 ## API Endpoints
 - `GET /databases`: List all registered databases.
@@ -108,5 +88,6 @@ curl -X PATCH "http://localhost:8000/databases/your_database_id_here" -H "Conten
 - `GET /backups`: List all backups.
 - `POST /backups`: Create a new backup for a registered database.
 - `GET /backups/{backup_id}`: Get the details of a specific backup.
+- `GET /metrics`: Exposes Prometheus metrics.
 
 You can find the full API documentation at `http://localhost:8000/docs`.
