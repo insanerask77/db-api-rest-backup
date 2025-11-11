@@ -1,0 +1,19 @@
+databases:
+  - name: "my-postgres-db"
+    engine: "postgres"
+    host: "postgres-db"
+    port: 5432
+    username_var: "POSTGRES_USER"
+    password_var: "POSTGRES_PASSWORD"
+    database_name: "testdb"
+    schedule: "0 3 * * *"
+    retention_days: 7
+  - name: "my-mongo-db"
+    engine: "mongodb"
+    host: "mongo-db"
+    port: 27017
+    username_var: "MONGO_USER"
+    password_var: "MONGO_PASSWORD"
+    database_name: "admin"
+    schedule: "0 4 * * *"
+    retention_days: 14

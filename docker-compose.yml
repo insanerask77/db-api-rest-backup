@@ -7,14 +7,16 @@ services:
       - "8000:8000"
     volumes:
       - ./backup_api/storage:/app/backup_api/storage
-      - ./config.json:/app/config.json
+      - ./config.yaml:/app/config.yaml
       - ./backup.db:/app/backup.db
     depends_on:
       - postgres-db
       - mongo-db
     environment:
-      - POSTGRES_HOST=postgres-db
-      - MONGO_HOST=mongo-db
+      - POSTGRES_USER=testuser
+      - POSTGRES_PASSWORD=testpassword
+      - MONGO_USER=root
+      - MONGO_PASSWORD=rootpassword
 
   postgres-db:
     image: postgres:13

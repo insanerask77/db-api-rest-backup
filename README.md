@@ -1,29 +1,10 @@
 # Backup API
 
-This is a REST API for managing database backups. It allows you to register databases, create real backups using `pg_dump` and `mongodump`, and query the status of backups.
+This is a REST API for managing database backups. It allows you to register databases, create real backups using `pg_dump` and `mongodump`, schedule them, and enforce retention policies.
 
 **Important:** This application is designed to be run inside the provided Docker container to ensure that `pg_dump` and `mongodump` are available.
 
 The application uses a persistent SQLite database (`backup.db`) to store all configurations and backup history.
-
-## Installation
-
-1. Clone the repository.
-2. Install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Running the application
-
-To run the application, use the following command:
-
-```bash
-uvicorn backup_api.main:app --reload
-```
-
-The API will be available at `http://localhost:8000`.
 
 ## Running the Full Environment with Docker Compose
 
@@ -41,131 +22,91 @@ To stop and remove the containers, run:
 docker-compose down
 ```
 
-## Predefined Configuration
+## Configuration
 
-This project supports loading a predefined list of databases at startup. Simply create a `config.json` file in the root of the project, and it will be loaded automatically when you run `docker-compose up`.
+### Predefined Databases (`config.yaml`)
 
-An example `config.json` is provided. You can customize it to match your needs:
-```json
-[
-  {
-    "name": "my-postgres-db",
-    "engine": "postgres",
-    "host": "postgres-db",
-    "port": 5432,
-    "username": "testuser",
-    "password": "testpassword",
-    "database_name": "testdb",
-    "schedule": "0 3 * * *",
-    "retention_days": 7
-  },
-  {
-    "name": "my-mongo-db",
-    "engine": "mongodb",
-    "host": "mongo-db",
-    "port": 27017,
-    "username": "root",
-    "password": "rootpassword",
-    "database_name": "admin",
-    "schedule": "0 4 * * *",
-    "retention_days": 14
-  }
-]
+This project supports loading a predefined list of databases at startup from a `config.yaml` file in the root of the project.
+
+**Important:** Credentials are not stored in this file. Instead, you specify the names of environment variables that hold the credentials.
+
+An example `config.yaml` is provided:
+```yaml
+databases:
+  - name: "my-postgres-db"
+    engine: "postgres"
+    host: "postgres-db"
+    port: 5432
+    username_var: "POSTGRES_USER"
+    password_var: "POSTGRES_PASSWORD"
+    database_name: "testdb"
+    schedule: "0 3 * * *"
+    retention_days: 7
+  - name: "my-mongo-db"
+    engine: "mongodb"
+    host: "mongo-db"
+    port: 27017
+    username_var: "MONGO_USER"
+    password_var: "MONGO_PASSWORD"
+    database_name: "admin"
+    schedule: "0 4 * * *"
+    retention_days: 14
 ```
-*When using this feature, you can skip the manual registration of databases.*
+
+### Credential Management
+
+Database credentials are provided to the application via environment variables, which are defined in the `docker-compose.yml` file. This is a security best practice.
+
+```yaml
+# In docker-compose.yml
+services:
+  backend:
+    # ...
+    environment:
+      - POSTGRES_USER=testuser
+      - POSTGRES_PASSWORD=testpassword
+      - MONGO_USER=root
+      - MONGO_PASSWORD=rootpassword
+```
 
 ## API Usage Examples
 
-Once the environment is running, you can use the following `curl` commands to interact with the API.
+Once the environment is running with the predefined configurations, you can start triggering and managing backups immediately.
 
-### 1. Register Databases (Optional)
-
-**Register the PostgreSQL test database:**
+### 1. List Preloaded Databases
 ```bash
-curl -X POST "http://localhost:8000/databases" -H "Content-Type: application/json" -d '{
-  "name": "my-postgres-db",
-  "engine": "postgres",
-  "host": "postgres-db",
-  "port": 5432,
-  "username": "testuser",
-  "password": "testpassword",
-  "database_name": "testdb"
-}'
+curl -X GET "http://localhost:8000/databases"
 ```
-*You will get a response with a database ID, for example: `{"id":"db_xxxxxxxx","name":"my-postgres-db"}`. Copy this ID for the next steps.*
 
-**Register the MongoDB test database:**
-```bash
-curl -X POST "http://localhost:8000/databases" -H "Content-Type: application/json" -d '{
-  "name": "my-mongo-db",
-  "engine": "mongodb",
-  "host": "mongo-db",
-  "port": 27017,
-  "username": "root",
-  "password": "rootpassword",
-  "database_name": "testdb"
-}'
-```
-*You will get a response with a database ID, for example: `{"id":"db_yyyyyyyy","name":"my-mongo-db"}`. Copy this ID.*
-
-### 2. Trigger Backups
-
-**Execute a backup for the PostgreSQL database (replace `db_xxxxxxxx` with your ID):**
+### 2. Trigger a Manual Backup
+Get a database ID from the list above and use it to trigger a backup.
 ```bash
 curl -X POST "http://localhost:8000/backups" -H "Content-Type: application/json" -d '{
-  "database_id": "db_xxxxxxxx",
-  "type": "full"
-}'
-```
-*You will get a response with a backup ID, for example: `{"backup_id":"bkp_zzzzzzzz","status":"running"}`.*
-
-**Execute a backup for the MongoDB database (replace `db_yyyyyyyy` with your ID):**
-```bash
-curl -X POST "http://localhost:8000/backups" -H "Content-Type: application/json" -d '{
-  "database_id": "db_yyyyyyyy",
+  "database_id": "your_database_id_here",
   "type": "full"
 }'
 ```
 
 ### 3. Check Backup Status
-
-**List all backups:**
 ```bash
 curl -X GET "http://localhost:8000/backups"
 ```
 
-**Get details of a specific backup (replace `bkp_zzzzzzzz` with a real backup ID):**
-```bash
-curl -X GET "http://localhost:8000/backups/bkp_zzzzzzzz"
-```
-*After a few seconds, the status should change from `running` to `completed`, and you will see the path to the backup file in the `storage` directory.*
-
 ### 4. Configure Schedule and Retention
-
-You can configure a backup schedule and retention policy for any registered database.
-
-**Set a daily backup schedule and a 7-day retention for the PostgreSQL database (replace `db_xxxxxxxx` with your ID):**
+Update the schedule for an existing database.
 ```bash
-curl -X PATCH "http://localhost:8000/databases/db_xxxxxxxx" -H "Content-Type: application/json" -d '{
+curl -X PATCH "http://localhost:8000/databases/your_database_id_here" -H "Content-Type: application/json" -d '{
   "schedule": "0 2 * * *",
-  "retention_days": 7
-}'
-```
-*This configures the backup to run every day at 2:00 AM. The retention policy will automatically delete backups older than 7 days.*
-
-**To remove a schedule, set it to `null`:**
-```bash
-curl -X PATCH "http://localhost:8000/databases/db_xxxxxxxx" -H "Content-Type: application/json" -d '{
-  "schedule": null
+  "retention_days": 5
 }'
 ```
 
 ## API Endpoints
-
+- `GET /databases`: List all registered databases.
 - `POST /databases`: Register a new database.
 - `PATCH /databases/{database_id}`: Update the schedule and retention policy for a database.
-- `POST /backups`: Create a new backup for a registered database.
 - `GET /backups`: List all backups.
+- `POST /backups`: Create a new backup for a registered database.
 - `GET /backups/{backup_id}`: Get the details of a specific backup.
 
 You can find the full API documentation at `http://localhost:8000/docs`.
