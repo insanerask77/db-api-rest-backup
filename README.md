@@ -4,6 +4,8 @@ This is a REST API for managing database backups. It allows you to register data
 
 **Important:** This application is designed to be run inside the provided Docker container to ensure that `pg_dump` and `mongodump` are available.
 
+The application uses a persistent SQLite database (`backup.db`) to store all configurations and backup history.
+
 ## Installation
 
 1. Clone the repository.
@@ -39,11 +41,44 @@ To stop and remove the containers, run:
 docker-compose down
 ```
 
+## Predefined Configuration
+
+This project supports loading a predefined list of databases at startup. Simply create a `config.json` file in the root of the project, and it will be loaded automatically when you run `docker-compose up`.
+
+An example `config.json` is provided. You can customize it to match your needs:
+```json
+[
+  {
+    "name": "my-postgres-db",
+    "engine": "postgres",
+    "host": "postgres-db",
+    "port": 5432,
+    "username": "testuser",
+    "password": "testpassword",
+    "database_name": "testdb",
+    "schedule": "0 3 * * *",
+    "retention_days": 7
+  },
+  {
+    "name": "my-mongo-db",
+    "engine": "mongodb",
+    "host": "mongo-db",
+    "port": 27017,
+    "username": "root",
+    "password": "rootpassword",
+    "database_name": "admin",
+    "schedule": "0 4 * * *",
+    "retention_days": 14
+  }
+]
+```
+*When using this feature, you can skip the manual registration of databases.*
+
 ## API Usage Examples
 
 Once the environment is running, you can use the following `curl` commands to interact with the API.
 
-### 1. Register Databases
+### 1. Register Databases (Optional)
 
 **Register the PostgreSQL test database:**
 ```bash

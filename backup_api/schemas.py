@@ -21,23 +21,35 @@ class DatabaseInfo(BaseModel):
     id: str
     name: str
 
+    class Config:
+        orm_mode = True
+
 class BackupCreate(BaseModel):
     database_id: str
     type: str
 
 class BackupInfo(BaseModel):
-    backup_id: str
+    id: str
     status: str
 
+    class Config:
+        orm_mode = True
+
 class BackupList(BaseModel):
-    backup_id: str
+    id: str
     database_id: str
     status: str
     started_at: datetime
     finished_at: Optional[datetime] = None
 
+    class Config:
+        orm_mode = True
+
 class BackupDetail(BaseModel):
-    backup_id: str
+    id: str
     status: str
     size_bytes: Optional[int] = None
     storage_path: Optional[str] = None
+
+    class Config:
+        orm_mode = True

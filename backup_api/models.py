@@ -1,10 +1,10 @@
-from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from sqlmodel import Field, SQLModel
 import uuid
 
-class Database(BaseModel):
-    id: str = Field(default_factory=lambda: f"db_{uuid.uuid4().hex[:6]}")
+class Database(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: f"db_{uuid.uuid4().hex[:6]}", primary_key=True)
     name: str
     engine: str
     host: str
@@ -15,9 +15,9 @@ class Database(BaseModel):
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
 
-class Backup(BaseModel):
-    id: str = Field(default_factory=lambda: f"bkp_{uuid.uuid4().hex[:6]}")
-    database_id: str
+class Backup(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: f"bkp_{uuid.uuid4().hex[:6]}", primary_key=True)
+    database_id: str = Field(foreign_key="database.id")
     type: str
     status: str = "running"
     started_at: datetime = Field(default_factory=datetime.utcnow)

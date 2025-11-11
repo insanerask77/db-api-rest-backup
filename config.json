@@ -1,0 +1,24 @@
+[
+  {
+    "name": "my-postgres-db",
+    "engine": "postgres",
+    "host": "postgres-db",
+    "port": 5432,
+    "username": "testuser",
+    "password": "testpassword",
+    "database_name": "testdb",
+    "schedule": "0 3 * * *",
+    "retention_days": 7
+  },
+  {
+    "name": "my-mongo-db",
+    "engine": "mongodb",
+    "host": "mongo-db",
+    "port": 27017,
+    "username": "root",
+    "password": "rootpassword",
+    "database_name": "admin",
+    "schedule": "0 4 * * *",
+    "retention_days": 14
+  }
+]
