@@ -12,6 +12,8 @@ class Database(BaseModel):
     username: str
     password: str
     database_name: str
+    schedule: Optional[str] = None
+    retention_days: Optional[int] = None
 
 class Backup(BaseModel):
     id: str = Field(default_factory=lambda: f"bkp_{uuid.uuid4().hex[:6]}")

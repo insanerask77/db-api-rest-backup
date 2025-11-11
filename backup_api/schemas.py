@@ -10,6 +10,12 @@ class DatabaseCreate(BaseModel):
     username: str
     password: str
     database_name: str
+    schedule: Optional[str] = None
+    retention_days: Optional[int] = None
+
+class DatabaseUpdate(BaseModel):
+    schedule: Optional[str] = None
+    retention_days: Optional[int] = None
 
 class DatabaseInfo(BaseModel):
     id: str

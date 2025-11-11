@@ -8,10 +8,22 @@ from backup_api.schemas import (
     BackupInfo,
     BackupList,
     BackupDetail,
+    DatabaseUpdate,
 )
 from . import backup_manager
+from .scheduler import scheduler, schedule_database_backups, schedule_retention_policy
 
 app = FastAPI()
+
+@app.on_event("startup")
+def startup_event():
+    scheduler.start()
+    schedule_database_backups(databases, backups)
+    schedule_retention_policy(databases, backups)
+
+@app.on_event("shutdown")
+def shutdown_event():
+    scheduler.shutdown()
 
 # In-memory storage
 databases: Dict[str, Database] = {}
@@ -25,7 +37,28 @@ def register_database(db: DatabaseCreate):
     """
     new_db = Database(**db.dict())
     databases[new_db.id] = new_db
+    schedule_database_backups(databases, backups)
     return {"id": new_db.id, "name": new_db.name}
+
+
+@app.patch("/databases/{database_id}", response_model=DatabaseInfo)
+def update_database_schedule(database_id: str, db_update: DatabaseUpdate):
+    """
+    Update the schedule and retention policy for a database.
+    """
+    db = databases.get(database_id)
+    if not db:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    if db_update.schedule is not None:
+        db.schedule = db_update.schedule
+    if db_update.retention_days is not None:
+        db.retention_days = db_update.retention_days
+
+    # Reschedule backups with the new settings
+    schedule_database_backups(databases, backups)
+
+    return {"id": db.id, "name": db.name}
 
 
 @app.post("/backups", response_model=BackupInfo)

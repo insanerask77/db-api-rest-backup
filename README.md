@@ -105,9 +105,30 @@ curl -X GET "http://localhost:8000/backups/bkp_zzzzzzzz"
 ```
 *After a few seconds, the status should change from `running` to `completed`, and you will see the path to the backup file in the `storage` directory.*
 
+### 4. Configure Schedule and Retention
+
+You can configure a backup schedule and retention policy for any registered database.
+
+**Set a daily backup schedule and a 7-day retention for the PostgreSQL database (replace `db_xxxxxxxx` with your ID):**
+```bash
+curl -X PATCH "http://localhost:8000/databases/db_xxxxxxxx" -H "Content-Type: application/json" -d '{
+  "schedule": "0 2 * * *",
+  "retention_days": 7
+}'
+```
+*This configures the backup to run every day at 2:00 AM. The retention policy will automatically delete backups older than 7 days.*
+
+**To remove a schedule, set it to `null`:**
+```bash
+curl -X PATCH "http://localhost:8000/databases/db_xxxxxxxx" -H "Content-Type: application/json" -d '{
+  "schedule": null
+}'
+```
+
 ## API Endpoints
 
 - `POST /databases`: Register a new database.
+- `PATCH /databases/{database_id}`: Update the schedule and retention policy for a database.
 - `POST /backups`: Create a new backup for a registered database.
 - `GET /backups`: List all backups.
 - `GET /backups/{backup_id}`: Get the details of a specific backup.
