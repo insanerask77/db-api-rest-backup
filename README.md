@@ -23,23 +23,87 @@ uvicorn backup_api.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 
-## Running with Docker
+## Running the Full Environment with Docker Compose
 
-You can also run the application using Docker.
+To test the complete solution, you can use Docker Compose to launch the backend API along with a PostgreSQL and a MongoDB database instance.
 
-### Build the Docker image
-
+**1. Start the services:**
 ```bash
-docker build -t backup-api .
+docker-compose up --build
+```
+This command will build the backend image, pull the database images, and start all three containers. The API will be available at `http://localhost:8000`.
+
+**2. Stop the services:**
+To stop and remove the containers, run:
+```bash
+docker-compose down
 ```
 
-### Run the Docker container
+## API Usage Examples
 
+Once the environment is running, you can use the following `curl` commands to interact with the API.
+
+### 1. Register Databases
+
+**Register the PostgreSQL test database:**
 ```bash
-docker run -p 8000:8000 backup-api
+curl -X POST "http://localhost:8000/databases" -H "Content-Type: application/json" -d '{
+  "name": "my-postgres-db",
+  "engine": "postgres",
+  "host": "postgres-db",
+  "port": 5432,
+  "username": "testuser",
+  "password": "testpassword",
+  "database_name": "testdb"
+}'
+```
+*You will get a response with a database ID, for example: `{"id":"db_xxxxxxxx","name":"my-postgres-db"}`. Copy this ID for the next steps.*
+
+**Register the MongoDB test database:**
+```bash
+curl -X POST "http://localhost:8000/databases" -H "Content-Type: application/json" -d '{
+  "name": "my-mongo-db",
+  "engine": "mongodb",
+  "host": "mongo-db",
+  "port": 27017,
+  "username": "root",
+  "password": "rootpassword",
+  "database_name": "testdb"
+}'
+```
+*You will get a response with a database ID, for example: `{"id":"db_yyyyyyyy","name":"my-mongo-db"}`. Copy this ID.*
+
+### 2. Trigger Backups
+
+**Execute a backup for the PostgreSQL database (replace `db_xxxxxxxx` with your ID):**
+```bash
+curl -X POST "http://localhost:8000/backups" -H "Content-Type: application/json" -d '{
+  "database_id": "db_xxxxxxxx",
+  "type": "full"
+}'
+```
+*You will get a response with a backup ID, for example: `{"backup_id":"bkp_zzzzzzzz","status":"running"}`.*
+
+**Execute a backup for the MongoDB database (replace `db_yyyyyyyy` with your ID):**
+```bash
+curl -X POST "http://localhost:8000/backups" -H "Content-Type: application/json" -d '{
+  "database_id": "db_yyyyyyyy",
+  "type": "full"
+}'
 ```
 
-The API will be available at `http://localhost:8000`.
+### 3. Check Backup Status
+
+**List all backups:**
+```bash
+curl -X GET "http://localhost:8000/backups"
+```
+
+**Get details of a specific backup (replace `bkp_zzzzzzzz` with a real backup ID):**
+```bash
+curl -X GET "http://localhost:8000/backups/bkp_zzzzzzzz"
+```
+*After a few seconds, the status should change from `running` to `completed`, and you will see the path to the backup file in the `storage` directory.*
 
 ## API Endpoints
 

@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backup_api/storage:/app/backup_api/storage
+    depends_on:
+      - postgres-db
+      - mongo-db
+    environment:
+      - POSTGRES_HOST=postgres-db
+      - MONGO_HOST=mongo-db
+
+  postgres-db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: testdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  mongo-db:
+    image: mongo:6.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+
+volumes:
+  postgres_data:
+  mongo_data:
