@@ -1,6 +1,8 @@
 # Backup API
 
-This is a REST API for managing database backups. It allows you to register databases, create simulated backups, and query the status of backups.
+This is a REST API for managing database backups. It allows you to register databases, create real backups using `pg_dump` and `mongodump`, and query the status of backups.
+
+**Important:** This application is designed to be run inside the provided Docker container to ensure that `pg_dump` and `mongodump` are available.
 
 ## Installation
 

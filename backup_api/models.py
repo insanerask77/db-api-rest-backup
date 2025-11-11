@@ -23,3 +23,4 @@ class Backup(BaseModel):
     size_bytes: Optional[int] = None
     storage_path: Optional[str] = None
     checksum: Optional[str] = None
+    log: Optional[str] = None

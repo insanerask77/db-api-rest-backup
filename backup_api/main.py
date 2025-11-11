@@ -33,13 +33,14 @@ def create_backup(backup_req: BackupCreate, background_tasks: BackgroundTasks):
     """
     Create a new backup for a registered database.
     """
-    if backup_req.database_id not in databases:
+    database = databases.get(backup_req.database_id)
+    if not database:
         raise HTTPException(status_code=404, detail="Database not found")
 
     new_backup = Backup(database_id=backup_req.database_id, type=backup_req.type)
     backups[new_backup.id] = new_backup
 
-    background_tasks.add_task(backup_manager.run_backup, new_backup.id, backups)
+    background_tasks.add_task(backup_manager.run_backup, new_backup.id, database, backups)
 
     return {"backup_id": new_backup.id, "status": new_backup.status}
 
