@@ -21,6 +21,24 @@ uvicorn backup_api.main:app --reload
 
 The API will be available at `http://localhost:8000`.
 
+## Running with Docker
+
+You can also run the application using Docker.
+
+### Build the Docker image
+
+```bash
+docker build -t backup-api .
+```
+
+### Run the Docker container
+
+```bash
+docker run -p 8000:8000 backup-api
+```
+
+The API will be available at `http://localhost:8000`.
+
 ## API Endpoints
 
 - `POST /databases`: Register a new database.
