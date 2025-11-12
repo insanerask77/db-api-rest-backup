@@ -40,3 +40,21 @@ RETENTION_FILES_DELETED_TOTAL = Counter(
     "Total number of files deleted by retention policy.",
     ["database_name"]
 )
+
+BACKUP_LAST_STATUS = Gauge(
+    "backup_last_status",
+    "Status of the last backup (1 for success, 0 for failure).",
+    ["database_name"]
+)
+
+BACKUP_LAST_SUCCESSFUL_SCHEDULED_TIMESTAMP_SECONDS = Gauge(
+    "backup_last_successful_scheduled_timestamp_seconds",
+    "Timestamp of the last successful scheduled backup.",
+    ["database_name"]
+)
+
+BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND = Gauge(
+    "backup_transfer_speed_bytes_per_second",
+    "Transfer speed of the last backup in bytes per second.",
+    ["database_name"]
+)
