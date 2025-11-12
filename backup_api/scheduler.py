@@ -10,7 +10,10 @@ from typing import Optional
 from .models import Database, Backup
 from .backup_manager import run_backup, STORAGE_DIR
 from .database import engine
-from .metrics import DISK_SPACE_AVAILABLE_BYTES, RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL
+from .metrics import (
+    DISK_SPACE_AVAILABLE_BYTES, RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL,
+    BACKUP_LAST_STATUS
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -110,3 +113,10 @@ def schedule_system_jobs():
     scheduler.add_job(enforce_retention, "cron", hour=1, id="retention_policy_job", name="Enforce Retention Policies", replace_existing=True)
     scheduler.add_job(update_disk_space_metric, "interval", minutes=5, id="disk_space_metric_job", name="Update Disk Space Metric", replace_existing=True)
     logger.info("Scheduled system jobs (retention and metrics).")
+
+def initialize_metrics():
+    with Session(engine) as session:
+        databases = session.exec(select(Database)).all()
+        for db in databases:
+            BACKUP_LAST_STATUS.labels(database_name=db.name).set(-1)
+    logger.info("Initialized metrics for all databases.")

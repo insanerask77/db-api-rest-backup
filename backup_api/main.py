@@ -4,7 +4,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from . import config
 from .database import create_db_and_tables, engine
-from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs
+from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs, initialize_metrics
 from .routers import databases, backups
 import logging
 
@@ -23,6 +23,7 @@ def startup_event():
     scheduler.start()
     schedule_database_backups()
     schedule_system_jobs()
+    initialize_metrics()
 
 @app.on_event("shutdown")
 def shutdown_event():
