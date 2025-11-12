@@ -8,3 +8,7 @@ backup_api/storage/*.bak
 
 # Log files
 uvicorn.log
+
+# Database files
+data/
+*.db

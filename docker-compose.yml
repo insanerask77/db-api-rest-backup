@@ -8,7 +8,7 @@ services:
     volumes:
       - ./backup_api/storage:/app/backup_api/storage
       - ./config.yaml:/app/config.yaml
-      - ./backup.db:/app/backup.db
+      - ./data:/app/data
     depends_on:
       - postgres-db
       - mongo-db
