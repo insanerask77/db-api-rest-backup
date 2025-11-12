@@ -10,7 +10,7 @@ from typing import Optional
 from .models import Database, Backup
 from .backup_manager import run_backup, STORAGE_DIR
 from .database import engine
-from .metrics import DISK_SPACE_AVAILABLE_BYTES
+from .metrics import DISK_SPACE_AVAILABLE_BYTES, RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,6 +65,8 @@ def enforce_retention(database_id: Optional[str] = None):
 
         now = datetime.utcnow()
         for db in dbs_to_check:
+            RETENTION_POLICY_RUNS_TOTAL.labels(database_name=db.name).inc()
+            files_deleted_count = 0
             # Time-based retention
             if db.retention_days is not None:
                 cutoff_date = now - timedelta(days=db.retention_days)
@@ -78,6 +80,7 @@ def enforce_retention(database_id: Optional[str] = None):
                 for backup in backups_to_delete:
                     if backup.storage_path and os.path.exists(backup.storage_path):
                         os.remove(backup.storage_path)
+                        files_deleted_count += 1
                     session.delete(backup)
                     logger.info(f"Deleted old backup '{backup.id}' for '{db.name}' (time policy).")
 
@@ -95,10 +98,13 @@ def enforce_retention(database_id: Optional[str] = None):
                     for backup in backups_to_delete:
                         if backup.storage_path and os.path.exists(backup.storage_path):
                             os.remove(backup.storage_path)
+                            files_deleted_count += 1
                         session.delete(backup)
                         logger.info(f"Deleted old backup '{backup.id}' for '{db.name}' (count policy).")
 
             session.commit()
+            if files_deleted_count > 0:
+                RETENTION_FILES_DELETED_TOTAL.labels(database_name=db.name).inc(files_deleted_count)
 
 def schedule_system_jobs():
     scheduler.add_job(enforce_retention, "cron", hour=1, id="retention_policy_job", name="Enforce Retention Policies", replace_existing=True)

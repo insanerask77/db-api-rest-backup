@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlmodel import Session
 from .models import Backup, Database
 from .database import engine
-from .metrics import BACKUPS_TOTAL, BACKUP_DURATION_SECONDS, BACKUP_SIZE_BYTES
+from .metrics import BACKUPS_TOTAL, BACKUP_DURATION_SECONDS, BACKUP_SIZE_BYTES, BACKUPS_DELETED_TOTAL
 
 STORAGE_DIR = "data/backups"
 
@@ -98,9 +98,15 @@ def delete_backup(backup_id: str) -> bool:
         if not backup:
             return False
 
+        db = session.get(Database, backup.database_id)
+        if not db:
+            return False
+
         if backup.storage_path and os.path.exists(backup.storage_path):
             os.remove(backup.storage_path)
 
         session.delete(backup)
         session.commit()
+
+        BACKUPS_DELETED_TOTAL.labels(database_name=db.name).inc()
         return True

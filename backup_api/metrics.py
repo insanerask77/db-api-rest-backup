@@ -22,3 +22,21 @@ DISK_SPACE_AVAILABLE_BYTES = Gauge(
     "disk_space_available_bytes",
     "Available disk space for backups in bytes."
 )
+
+BACKUPS_DELETED_TOTAL = Counter(
+    "backups_deleted_total",
+    "Total number of backups deleted.",
+    ["database_name"]
+)
+
+RETENTION_POLICY_RUNS_TOTAL = Counter(
+    "retention_policy_runs_total",
+    "Total number of retention policy runs.",
+    ["database_name"]
+)
+
+RETENTION_FILES_DELETED_TOTAL = Counter(
+    "retention_files_deleted_total",
+    "Total number of files deleted by retention policy.",
+    ["database_name"]
+)
