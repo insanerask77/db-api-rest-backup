@@ -18,13 +18,13 @@ def load_and_sync_databases(session: Session):
             db_configs = config_data.get("databases", [])
 
             for config in db_configs:
-                # Load credentials from environment variables
+                # Load credentials from environment variables or directly from config
                 username_var = config.pop("username_var", None)
                 password_var = config.pop("password_var", None)
 
-                if username_var:
+                if "username" not in config and username_var:
                     config["username"] = os.getenv(username_var)
-                if password_var:
+                if "password" not in config and password_var:
                     config["password"] = os.getenv(password_var)
 
                 # Check if all required credentials are provided
