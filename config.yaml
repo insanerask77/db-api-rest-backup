@@ -9,6 +9,7 @@ databases:
     schedule: "0 3 * * *"
     retention_days: 7
     max_backups: 5
+    compression: "gzip"
   - name: "my-mongo-db"
     engine: "mongodb"
     host: "mongo-db"
@@ -19,3 +20,4 @@ databases:
     schedule: "0 4 * * *"
     retention_days: 14
     max_backups: 10
+    compression: "none"

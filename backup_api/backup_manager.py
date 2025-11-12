@@ -2,6 +2,7 @@ import os
 import subprocess
 import hashlib
 import time
+import gzip
 from datetime import datetime
 from sqlmodel import Session
 from .models import Backup, Database
@@ -19,7 +20,13 @@ def run_backup(backup_id: str, db_id: str):
         if not backup or not db:
             return
 
-        file_path = os.path.join(STORAGE_DIR, f"{backup.id}.bak")
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        file_extension = ".sql" if db.engine == "postgres" else ".archive"
+        if db.compression == "gzip":
+            file_extension += ".gz"
+
+        filename = f"{db.engine}_{db.database_name}_{timestamp}{file_extension}"
+        file_path = os.path.join(STORAGE_DIR, filename)
         status = "failed"
 
         try:
@@ -31,12 +38,25 @@ def run_backup(backup_id: str, db_id: str):
                 env["PGPASSWORD"] = db.password
                 cmd = [
                     "pg_dump", "-h", db.host, "-p", str(db.port), "-U", db.username,
-                    "-d", db.database_name, "-f", file_path, "--format=c"
+                    "-d", db.database_name, "--format=c"
                 ]
-                result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+
+                result = subprocess.run(cmd, env=env, capture_output=True)
+
+                if result.returncode == 0:
+                    if db.compression == "gzip":
+                        with gzip.open(file_path, "wb") as f:
+                            f.write(result.stdout)
+                    else:
+                        with open(file_path, "wb") as f:
+                            f.write(result.stdout)
+
             elif db.engine == "mongodb":
                 uri = f"mongodb://{db.username}:{db.password}@{db.host}:{db.port}/{db.database_name}?authSource=admin"
-                cmd = ["mongodump", f"--uri={uri}", f"--archive={file_path}", "--gzip"]
+                cmd = ["mongodump", f"--uri={uri}", f"--archive={file_path}"]
+                if db.compression == "gzip":
+                    cmd.append("--gzip")
+
                 result = subprocess.run(cmd, capture_output=True, text=True)
             else:
                 raise ValueError(f"Unsupported database engine: {db.engine}")
@@ -47,7 +67,7 @@ def run_backup(backup_id: str, db_id: str):
             with open(file_path, "rb") as f:
                 file_content = f.read()
                 backup.size_bytes = len(file_content)
-                backup.checksum = hashlib.sha256(file_content).hexdigest()
+                backup.checksum = hashlib.md5(file_content).hexdigest()
                 BACKUP_SIZE_BYTES.labels(database_name=db.name).set(backup.size_bytes)
 
             backup.storage_path = file_path

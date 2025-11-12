@@ -13,11 +13,13 @@ class DatabaseCreate(BaseModel):
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
     max_backups: Optional[int] = None
+    compression: Optional[str] = "none"
 
 class DatabaseUpdate(BaseModel):
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
     max_backups: Optional[int] = None
+    compression: Optional[str] = None
 
 class DatabaseInfo(BaseModel):
     id: str
