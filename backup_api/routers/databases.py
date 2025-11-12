@@ -5,7 +5,7 @@ from typing import List
 from ..models import Database
 from ..schemas import DatabaseCreate, DatabaseDetail, DatabaseUpdate
 from ..database import get_session
-from ..scheduler import schedule_database_backups
+from ..scheduler import schedule_database_backups, scheduler
 
 router = APIRouter()
 
@@ -47,3 +47,18 @@ def update_database(database_id: str, db_update: DatabaseUpdate, session: Sessio
     schedule_database_backups()
 
     return db
+
+@router.delete("/{database_id}", status_code=204)
+def delete_database(database_id: str, session: Session = Depends(get_session)):
+    db = session.get(Database, database_id)
+    if not db:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    # Remove the job from the scheduler
+    job_id = f"backup_{db.id}"
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
+    session.delete(db)
+    session.commit()
+    return
