@@ -91,3 +91,16 @@ def run_backup(backup_id: str, db_id: str):
             if status == "completed":
                 from .scheduler import enforce_retention
                 enforce_retention(db.id)
+
+def delete_backup(backup_id: str) -> bool:
+    with Session(engine) as session:
+        backup = session.get(Backup, backup_id)
+        if not backup:
+            return False
+
+        if backup.storage_path and os.path.exists(backup.storage_path):
+            os.remove(backup.storage_path)
+
+        session.delete(backup)
+        session.commit()
+        return True

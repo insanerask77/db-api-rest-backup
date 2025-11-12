@@ -6,7 +6,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backup_api/storage:/app/backup_api/storage
       - ./config.yaml:/app/config.yaml
       - ./data:/app/data
     depends_on:
