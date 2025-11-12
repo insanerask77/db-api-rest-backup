@@ -13,10 +13,6 @@ services:
       - postgres-db
       - mongo-db
     environment:
-      - POSTGRES_USER=testuser
-      - POSTGRES_PASSWORD=testpassword
-      - MONGO_USER=root
-      - MONGO_PASSWORD=rootpassword
       - TZ=Europe/Madrid
 
   postgres-db:
