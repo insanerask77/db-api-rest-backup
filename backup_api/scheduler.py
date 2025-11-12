@@ -11,7 +11,8 @@ from .models import Database, Backup
 from .backup_manager import run_backup, STORAGE_DIR
 from .database import engine
 from .metrics import (
-    DISK_SPACE_AVAILABLE_BYTES, RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL,
+    DISK_SPACE_AVAILABLE_BYTES, DISK_SPACE_USED_BYTES, DISK_SPACE_TOTAL_BYTES,
+    RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL,
     BACKUP_LAST_STATUS
 )
 
@@ -23,6 +24,8 @@ def update_disk_space_metric():
     if os.path.exists(STORAGE_DIR):
         disk_usage = psutil.disk_usage(STORAGE_DIR)
         DISK_SPACE_AVAILABLE_BYTES.set(disk_usage.free)
+        DISK_SPACE_USED_BYTES.set(disk_usage.used)
+        DISK_SPACE_TOTAL_BYTES.set(disk_usage.total)
 
 def trigger_scheduled_backup(db_id: str):
     with Session(engine) as session:

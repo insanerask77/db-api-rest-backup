@@ -23,6 +23,16 @@ DISK_SPACE_AVAILABLE_BYTES = Gauge(
     "Available disk space for backups in bytes."
 )
 
+DISK_SPACE_USED_BYTES = Gauge(
+    "disk_space_used_bytes",
+    "Used disk space for backups in bytes."
+)
+
+DISK_SPACE_TOTAL_BYTES = Gauge(
+    "disk_space_total_bytes",
+    "Total disk space for backups in bytes."
+)
+
 BACKUPS_DELETED_TOTAL = Counter(
     "backups_deleted_total",
     "Total number of backups deleted.",
