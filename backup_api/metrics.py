@@ -22,3 +22,55 @@ DISK_SPACE_AVAILABLE_BYTES = Gauge(
     "disk_space_available_bytes",
     "Available disk space for backups in bytes."
 )
+
+DISK_SPACE_USED_BYTES = Gauge(
+    "disk_space_used_bytes",
+    "Used disk space for backups in bytes."
+)
+
+DISK_SPACE_TOTAL_BYTES = Gauge(
+    "disk_space_total_bytes",
+    "Total disk space for backups in bytes."
+)
+
+BACKUPS_DELETED_TOTAL = Counter(
+    "backups_deleted_total",
+    "Total number of backups deleted.",
+    ["database_name"]
+)
+
+RETENTION_POLICY_RUNS_TOTAL = Counter(
+    "retention_policy_runs_total",
+    "Total number of retention policy runs.",
+    ["database_name"]
+)
+
+RETENTION_FILES_DELETED_TOTAL = Counter(
+    "retention_files_deleted_total",
+    "Total number of files deleted by retention policy.",
+    ["database_name"]
+)
+
+BACKUP_LAST_STATUS = Gauge(
+    "backup_last_status",
+    "Status of the last backup (1 for success, 0 for failure).",
+    ["database_name"]
+)
+
+BACKUP_LAST_SUCCESSFUL_SCHEDULED_TIMESTAMP_SECONDS = Gauge(
+    "backup_last_successful_scheduled_timestamp_seconds",
+    "Timestamp of the last successful scheduled backup.",
+    ["database_name"]
+)
+
+BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND = Gauge(
+    "backup_transfer_speed_bytes_per_second",
+    "Transfer speed of the last backup in bytes per second.",
+    ["database_name"]
+)
+
+BACKUP_LAST_INTEGRITY_STATUS = Gauge(
+    "backup_last_integrity_status",
+    "Status of the last backup's integrity check (1 for success, 0 for failure).",
+    ["database_name"]
+)
