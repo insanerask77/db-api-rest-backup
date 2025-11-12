@@ -58,3 +58,9 @@ BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND = Gauge(
     "Transfer speed of the last backup in bytes per second.",
     ["database_name"]
 )
+
+BACKUP_LAST_INTEGRITY_STATUS = Gauge(
+    "backup_last_integrity_status",
+    "Status of the last backup's integrity check (1 for success, 0 for failure).",
+    ["database_name"]
+)

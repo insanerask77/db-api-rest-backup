@@ -10,7 +10,7 @@ from .database import engine
 from .metrics import (
     BACKUPS_TOTAL, BACKUP_DURATION_SECONDS, BACKUP_SIZE_BYTES, BACKUPS_DELETED_TOTAL,
     BACKUP_LAST_STATUS, BACKUP_LAST_SUCCESSFUL_SCHEDULED_TIMESTAMP_SECONDS,
-    BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND
+    BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND, BACKUP_LAST_INTEGRITY_STATUS
 )
 
 STORAGE_DIR = "data/backups"
@@ -94,6 +94,11 @@ def run_backup(backup_id: str, db_id: str):
             BACKUP_LAST_STATUS.labels(database_name=db.name).set(1 if status == "completed" else 0)
 
             if status == "completed":
+                if backup.checksum:
+                    BACKUP_LAST_INTEGRITY_STATUS.labels(database_name=db.name).set(1)
+                else:
+                    BACKUP_LAST_INTEGRITY_STATUS.labels(database_name=db.name).set(0)
+
                 if backup.size_bytes and duration > 0:
                     speed = backup.size_bytes / duration
                     BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND.labels(database_name=db.name).set(speed)
@@ -103,6 +108,8 @@ def run_backup(backup_id: str, db_id: str):
 
                 from .scheduler import enforce_retention
                 enforce_retention(db.id)
+            else:
+                BACKUP_LAST_INTEGRITY_STATUS.labels(database_name=db.name).set(0)
 
 def delete_backup(backup_id: str) -> bool:
     with Session(engine) as session:
