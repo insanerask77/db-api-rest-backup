@@ -3,13 +3,13 @@ from sqlmodel import Session, select
 from typing import List
 
 from ..models import Database
-from ..schemas import DatabaseCreate, DatabaseInfo, DatabaseUpdate
+from ..schemas import DatabaseCreate, DatabaseDetail, DatabaseUpdate
 from ..database import get_session
 from ..scheduler import schedule_database_backups
 
 router = APIRouter()
 
-@router.post("", response_model=DatabaseInfo)
+@router.post("", response_model=DatabaseDetail)
 def register_database(db: DatabaseCreate, session: Session = Depends(get_session)):
     new_db = Database.from_orm(db)
     session.add(new_db)
@@ -18,20 +18,20 @@ def register_database(db: DatabaseCreate, session: Session = Depends(get_session
     schedule_database_backups()
     return new_db
 
-@router.get("", response_model=List[DatabaseInfo])
+@router.get("", response_model=List[DatabaseDetail])
 def list_databases(session: Session = Depends(get_session)):
     databases = session.exec(select(Database)).all()
     return databases
 
-@router.get("/{database_id}", response_model=DatabaseInfo)
+@router.get("/{database_id}", response_model=DatabaseDetail)
 def get_database(database_id: str, session: Session = Depends(get_session)):
     db = session.get(Database, database_id)
     if not db:
         raise HTTPException(status_code=404, detail="Database not found")
     return db
 
-@router.patch("/{database_id}", response_model=DatabaseInfo)
-def update_database_schedule(database_id: str, db_update: DatabaseUpdate, session: Session = Depends(get_session)):
+@router.patch("/{database_id}", response_model=DatabaseDetail)
+def update_database(database_id: str, db_update: DatabaseUpdate, session: Session = Depends(get_session)):
     db = session.get(Database, database_id)
     if not db:
         raise HTTPException(status_code=404, detail="Database not found")

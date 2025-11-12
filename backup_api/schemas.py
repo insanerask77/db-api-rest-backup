@@ -2,28 +2,36 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
-class DatabaseCreate(BaseModel):
+class DatabaseBase(BaseModel):
     name: str
     engine: str
     host: str
     port: int
-    username: str
-    password: str
     database_name: str
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
     max_backups: Optional[int] = None
     compression: Optional[str] = "none"
 
+class DatabaseCreate(DatabaseBase):
+    username: str
+    password: str
+
 class DatabaseUpdate(BaseModel):
+    name: Optional[str] = None
+    engine: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    database_name: Optional[str] = None
     schedule: Optional[str] = None
     retention_days: Optional[int] = None
     max_backups: Optional[int] = None
     compression: Optional[str] = None
 
-class DatabaseInfo(BaseModel):
+class DatabaseDetail(DatabaseBase):
     id: str
-    name: str
 
     class Config:
         orm_mode = True
@@ -54,6 +62,7 @@ class BackupDetail(BaseModel):
     status: str
     size_bytes: Optional[int] = None
     storage_path: Optional[str] = None
+    log: Optional[str] = None
 
     class Config:
         orm_mode = True

@@ -8,8 +8,9 @@ from sqlmodel import Session
 from .models import Backup, Database
 from .database import engine
 from .metrics import BACKUPS_TOTAL, BACKUP_DURATION_SECONDS, BACKUP_SIZE_BYTES
+from .scheduler import enforce_retention
 
-STORAGE_DIR = "backup_api/storage"
+STORAGE_DIR = "data/backups"
 
 def run_backup(backup_id: str, db_id: str):
     start_time = time.time()
@@ -87,3 +88,6 @@ def run_backup(backup_id: str, db_id: str):
 
             BACKUPS_TOTAL.labels(database_name=db.name, status=status).inc()
             BACKUP_DURATION_SECONDS.labels(database_name=db.name).observe(duration)
+
+            if status == "completed":
+                enforce_retention(db.id)

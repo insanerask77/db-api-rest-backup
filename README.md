@@ -9,11 +9,12 @@ The application uses a persistent SQLite database (`backup.db`) to store all con
 ## Features
 
 - **Database Support:** PostgreSQL and MongoDB.
+- **Dynamic Configuration:** Update any database parameter on the fly via the API.
 - **Backup Naming:** Backups are stored with a clear, descriptive name: `engine_dbname_timestamp`.
 - **Compression:** Configurable backup compression (`gzip` or `none`).
 - **Integrity:** Each backup includes an MD5 checksum to verify its integrity.
-- **Scheduling:** Cron-based scheduling for automated backups.
-- **Retention Policies:** Dual-criteria retention (by age and by count).
+- **Scheduling:** Cron-based scheduling with configurable timezone support.
+- **Retention Policies:** Dual-criteria retention (by age and by count), applied immediately after each backup.
 - **Monitoring:** Prometheus endpoint at `/metrics`.
 
 ## Running the Full Environment with Docker Compose
@@ -34,6 +35,19 @@ docker-compose down
 
 ## Configuration
 
+### Timezone
+
+You can set the timezone for the application and the scheduler by modifying the `TZ` environment variable in the `docker-compose.yml` file.
+
+```yaml
+# In docker-compose.yml
+services:
+  backend:
+    # ...
+    environment:
+      - TZ=Europe/Madrid
+```
+
 ### Predefined Databases (`config.yaml`)
 
 This project supports loading a predefined list of databases at startup from a `config.yaml` file in the root of the project.
@@ -52,17 +66,6 @@ databases:
     retention_days: 7
     max_backups: 5
     compression: "gzip"
-  - name: "my-mongo-db"
-    engine: "mongodb"
-    host: "mongo-db"
-    port: 27017
-    username_var: "MONGO_USER"
-    password_var: "MONGO_PASSWORD"
-    database_name: "admin"
-    schedule: "0 4 * * *"
-    retention_days: 14
-    max_backups: 10
-    compression: "none"
 ```
 
 ### Credential Management
@@ -74,9 +77,9 @@ Database credentials are provided to the application via environment variables, 
 The application exposes a `/metrics` endpoint with Prometheus metrics. You can access them at `http://localhost:8000/metrics`.
 
 ## API Endpoints
-- `GET /databases`: List all registered databases.
+- `GET /databases`: List the full configuration of all registered databases.
 - `POST /databases`: Register a new database.
-- `PATCH /databases/{database_id}`: Update database settings (schedule, retention, compression).
+- `PATCH /databases/{database_id}`: Update any setting for a database (host, port, credentials, schedule, etc.).
 - `GET /backups`: List all backups.
 - `POST /backups`: Create a new on-demand backup.
 - `GET /backups/{backup_id}`: Get the details of a specific backup.
