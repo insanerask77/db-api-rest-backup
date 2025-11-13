@@ -75,13 +75,16 @@ def run_backup(backup_id: str, db_id: str):
             if result.returncode != 0:
                 raise RuntimeError(f"Backup failed: {result.stderr}")
 
-            storage.save(source_path=tmp_path, destination_path=storage_path)
-
             with open(tmp_path, "rb") as f:
                 file_content = f.read()
                 backup.size_bytes = len(file_content)
                 backup.checksum = hashlib.md5(file_content).hexdigest()
                 BACKUP_SIZE_BYTES.labels(database_name=db.name).set(backup.size_bytes)
+
+            storage.save(source_path=tmp_path, destination_path=storage_path)
+
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
             backup.storage_path = storage_path
             status = "completed"
