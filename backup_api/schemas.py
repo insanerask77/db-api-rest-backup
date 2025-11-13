@@ -38,7 +38,26 @@ class DatabaseDetail(DatabaseBase):
     id: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class PackageBase(BaseModel):
+    storage_path: str
+    size_bytes: int
+    checksum: str
+
+class PackageList(PackageBase):
+    id: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PackageDetail(PackageBase):
+    id: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class PackageBase(BaseModel):
     storage_path: str
@@ -68,7 +87,7 @@ class BackupInfo(BaseModel):
     status: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BackupList(BaseModel):
     id: str
@@ -78,7 +97,7 @@ class BackupList(BaseModel):
     finished_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BackupDetail(BaseModel):
     id: str
@@ -88,4 +107,4 @@ class BackupDetail(BaseModel):
     log: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

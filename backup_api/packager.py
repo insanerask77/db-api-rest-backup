@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 
 from .models import Database, Backup, Package
 from .backup_manager import run_backup
+from .metrics import PACKAGE_LAST_STATUS, PACKAGES_TOTAL, PACKAGES_SIZE_BYTES
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ def create_package(session: Session, compression: str = "zip"):
     Finds all databases marked for packaging, gathers their latest backups,
     and compresses them into a single package file.
     """
+    PACKAGE_LAST_STATUS.set(0)
     package_dir = "data/packages"
     os.makedirs(package_dir, exist_ok=True)
 
@@ -73,5 +75,9 @@ def create_package(session: Session, compression: str = "zip"):
     )
     session.add(new_package)
     session.commit()
+
+    PACKAGE_LAST_STATUS.set(1)
+    PACKAGES_TOTAL.inc()
+    PACKAGES_SIZE_BYTES.inc(size_bytes)
 
     logger.info(f"Successfully created package: {package_path}")

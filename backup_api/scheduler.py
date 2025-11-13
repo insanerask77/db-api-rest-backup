@@ -14,7 +14,7 @@ from .database import engine
 from .metrics import (
     DISK_SPACE_AVAILABLE_BYTES, DISK_SPACE_USED_BYTES, DISK_SPACE_TOTAL_BYTES,
     RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL,
-    BACKUP_LAST_STATUS
+    BACKUP_LAST_STATUS, PACKAGES_ESTIMATED_CAPACITY
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -116,6 +116,7 @@ def enforce_retention(database_id: Optional[str] = None):
 def schedule_system_jobs(package_conf=None):
     scheduler.add_job(enforce_retention, "cron", hour=1, id="retention_policy_job", name="Enforce Retention Policies", replace_existing=True)
     scheduler.add_job(update_disk_space_metric, "interval", minutes=5, id="disk_space_metric_job", name="Update Disk Space Metric", replace_existing=True)
+    scheduler.add_job(update_package_capacity_metric, "interval", minutes=15, id="package_capacity_metric_job", name="Update Package Capacity Metric", replace_existing=True)
 
     if package_conf and package_conf.get('schedule'):
         schedule_package_creation(package_conf)
@@ -174,3 +175,20 @@ def initialize_metrics():
         for db in databases:
             BACKUP_LAST_STATUS.labels(database_name=db.name).set(-1)
     logger.info("Initialized metrics for all databases.")
+
+def update_package_capacity_metric():
+    with Session(engine) as session:
+        packages = session.exec(select(Package)).all()
+        if not packages:
+            PACKAGES_ESTIMATED_CAPACITY.set(0)
+            return
+
+        total_size = sum(p.size_bytes for p in packages)
+        avg_size = total_size / len(packages)
+
+        if avg_size > 0:
+            disk_usage = psutil.disk_usage(STORAGE_DIR)
+            estimated_capacity = disk_usage.free / avg_size
+            PACKAGES_ESTIMATED_CAPACITY.set(estimated_capacity)
+        else:
+            PACKAGES_ESTIMATED_CAPACITY.set(0)
