@@ -15,6 +15,7 @@ def load_and_sync_databases(session: Session):
     with open(config_path, "r") as f:
         try:
             config_data = yaml.safe_load(f)
+            global_config = config_data.get("global", {})
             db_configs = config_data.get("databases", [])
 
             if not db_configs:
@@ -29,7 +30,16 @@ def load_and_sync_databases(session: Session):
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
+            db_defaults = {
+                "schedule", "compression", "retention_days", "max_backups"
+            }
+
             for config in db_configs:
+                # Apply global defaults
+                for key, value in global_config.items():
+                    if key in db_defaults and key not in config:
+                        config[key] = value
+
                 config_id = config.get('id')
                 if not config_id:
                     db_name_for_log = config.get('name', 'N/A')

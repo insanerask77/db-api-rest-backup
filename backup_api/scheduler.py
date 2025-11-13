@@ -17,9 +17,19 @@ from .metrics import (
     BACKUP_LAST_STATUS, PACKAGES_ESTIMATED_CAPACITY
 )
 
+from apscheduler.executors.pool import ThreadPoolExecutor
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# This will be configured in main.py
 scheduler = BackgroundScheduler()
+
+def configure_scheduler(max_workers=10):
+    executors = {
+        'default': ThreadPoolExecutor(max_workers)
+    }
+    scheduler.configure(executors=executors)
 
 def update_disk_space_metric():
     if os.path.exists(STORAGE_DIR):

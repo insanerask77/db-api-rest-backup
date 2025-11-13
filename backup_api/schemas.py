@@ -59,25 +59,6 @@ class PackageDetail(PackageBase):
     class Config:
         from_attributes = True
 
-class PackageBase(BaseModel):
-    storage_path: str
-    size_bytes: int
-    checksum: str
-
-class PackageList(PackageBase):
-    id: str
-    created_at: datetime
-
-    class Config:
-        orm_mode = True
-
-class PackageDetail(PackageBase):
-    id: str
-    created_at: datetime
-
-    class Config:
-        orm_mode = True
-
 class BackupCreate(BaseModel):
     database_id: str
     type: str
@@ -95,6 +76,7 @@ class BackupList(BaseModel):
     status: str
     started_at: datetime
     finished_at: Optional[datetime] = None
+    checksum: Optional[str] = None
 
     class Config:
         from_attributes = True

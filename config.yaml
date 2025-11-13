@@ -1,3 +1,10 @@
+global:
+  schedule: "0 2 * * *"
+  compression: "gzip"
+  retention_days: 15
+  max_backups: 10
+  max_parallel_jobs: 3
+
 databases:
   - id: "postgres-main"
     name: "my-postgres-db"
@@ -20,7 +27,6 @@ databases:
     username: "root"
     password: "rootpassword"
     database_name: "admin"
-    schedule: "0 4 * * *"
     retention_days: 14
     max_backups: 10
     compression: "none"
