@@ -5,6 +5,7 @@ import uuid
 
 class Database(SQLModel, table=True):
     id: str = Field(default_factory=lambda: f"db_{uuid.uuid4().hex[:6]}", primary_key=True)
+    config_id: Optional[str] = Field(default=None, index=True, unique=True)
     name: str
     engine: str
     host: str

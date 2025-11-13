@@ -1,5 +1,6 @@
 databases:
-  - name: "my-postgres-db"
+  - id: "postgres-main"
+    name: "my-postgres-db"
     engine: "postgres"
     host: "postgres-db"
     port: 5432
@@ -10,7 +11,8 @@ databases:
     retention_days: 7
     max_backups: 5
     compression: "gzip"
-  - name: "my-mongo-db"
+  - id: "mongo-main"
+    name: "my-mongo-db"
     engine: "mongodb"
     host: "mongo-db"
     port: 27017
