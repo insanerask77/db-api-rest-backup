@@ -8,13 +8,13 @@ global:
 # Optional: Configure storage backend. Defaults to local storage in 'data/' if omitted.
 # To use S3-compatible storage, uncomment and configure the section below.
 # Make sure the application has credentials and permissions to access the bucket.
-# storage:
-#   type: s3
-#   s3:
-#     endpoint_url: http://minio:9000
-#     access_key: minioadmin
-#     secret_key: minioadminpassword
-#     bucket: backups
+storage:
+  type: s3
+  s3:
+    endpoint_url: http://minio:9000
+    access_key: minioadmin
+    secret_key: minioadminpassword
+    bucket: backups
 
 databases:
   - id: "postgres-main"
