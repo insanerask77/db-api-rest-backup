@@ -5,6 +5,17 @@ global:
   max_backups: 10
   max_parallel_jobs: 3
 
+# Optional: Configure storage backend. Defaults to local storage in 'data/' if omitted.
+# To use S3-compatible storage, uncomment and configure the section below.
+# Make sure the application has credentials and permissions to access the bucket.
+# storage:
+#   type: s3
+#   s3:
+#     endpoint_url: http://minio:9000
+#     access_key: minioadmin
+#     secret_key: minioadminpassword
+#     bucket: backups
+
 databases:
   - id: "postgres-main"
     name: "my-postgres-db"
