@@ -5,6 +5,7 @@ import uuid
 
 class Database(SQLModel, table=True):
     id: str = Field(default_factory=lambda: f"db_{uuid.uuid4().hex[:6]}", primary_key=True)
+    config_id: Optional[str] = Field(default=None, index=True, unique=True)
     name: str
     engine: str
     host: str
@@ -16,6 +17,14 @@ class Database(SQLModel, table=True):
     retention_days: Optional[int] = None
     max_backups: Optional[int] = None
     compression: str = "none"
+    package: bool = Field(default=False)
+
+class Package(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: f"pkg_{uuid.uuid4().hex[:6]}", primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    storage_path: str
+    size_bytes: int
+    checksum: str
 
 class Backup(SQLModel, table=True):
     id: str = Field(default_factory=lambda: f"bkp_{uuid.uuid4().hex[:6]}", primary_key=True)

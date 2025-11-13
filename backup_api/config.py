@@ -17,7 +17,28 @@ def load_and_sync_databases(session: Session):
             config_data = yaml.safe_load(f)
             db_configs = config_data.get("databases", [])
 
+            if not db_configs:
+                return
+
+            # Pre-validate for duplicate IDs
+            config_ids = [conf.get('id') for conf in db_configs if conf.get('id')]
+            if len(config_ids) > len(set(config_ids)):
+                seen = set()
+                duplicates = {x for x in config_ids if x in seen or seen.add(x)}
+                error_msg = f"Duplicate IDs found in config.yaml: {list(duplicates)}. Halting sync process."
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
             for config in db_configs:
+                config_id = config.get('id')
+                if not config_id:
+                    db_name_for_log = config.get('name', 'N/A')
+                    logger.warning(
+                        f"Skipping a database configuration (name: {db_name_for_log}) "
+                        f"because it is missing the required 'id' field."
+                    )
+                    continue
+
                 # Load credentials from environment variables or directly from config
                 username_var = config.pop("username_var", None)
                 password_var = config.pop("password_var", None)
@@ -27,18 +48,34 @@ def load_and_sync_databases(session: Session):
                 if "password" not in config and password_var:
                     config["password"] = os.getenv(password_var)
 
-                # Check if all required credentials are provided
                 if not config.get("username") or not config.get("password"):
-                    logger.warning(f"Skipping database '{config['name']}' due to missing credentials.")
+                    logger.warning(f"Skipping database with id '{config_id}' due to missing credentials.")
                     continue
 
-                existing_db = session.exec(select(Database).where(Database.name == config["name"])).first()
-                if not existing_db:
-                    db = Database(**config)
+                existing_db = session.exec(select(Database).where(Database.config_id == config_id)).first()
+
+                config.pop('id')
+
+                if existing_db:
+                    logger.info(f"Updating database configuration for config_id='{config_id}'.")
+                    for key, value in config.items():
+                        setattr(existing_db, key, value)
+                    session.add(existing_db)
+                else:
+                    logger.info(f"Creating new database configuration for config_id='{config_id}'.")
+                    db = Database(config_id=config_id, **config)
                     session.add(db)
 
             session.commit()
-            logger.info(f"Successfully loaded and synced databases from config.")
+            logger.info("Successfully synced databases from config.yaml.")
 
         except yaml.YAMLError as e:
             logger.error(f"Error parsing config.yaml: {e}")
+            raise
+        except ValueError as e:
+            logger.error(f"Configuration validation failed: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during database sync: {e}")
+            session.rollback()
+            raise

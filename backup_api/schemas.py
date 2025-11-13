@@ -3,6 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 
 class DatabaseBase(BaseModel):
+    config_id: Optional[str] = None
     name: str
     engine: str
     host: str
@@ -12,12 +13,14 @@ class DatabaseBase(BaseModel):
     retention_days: Optional[int] = None
     max_backups: Optional[int] = None
     compression: Optional[str] = "none"
+    package: Optional[bool] = False
 
 class DatabaseCreate(DatabaseBase):
     username: str
     password: str
 
 class DatabaseUpdate(BaseModel):
+    config_id: Optional[str] = None
     name: Optional[str] = None
     engine: Optional[str] = None
     host: Optional[str] = None
@@ -29,9 +32,29 @@ class DatabaseUpdate(BaseModel):
     retention_days: Optional[int] = None
     max_backups: Optional[int] = None
     compression: Optional[str] = None
+    package: Optional[bool] = None
 
 class DatabaseDetail(DatabaseBase):
     id: str
+
+    class Config:
+        orm_mode = True
+
+class PackageBase(BaseModel):
+    storage_path: str
+    size_bytes: int
+    checksum: str
+
+class PackageList(PackageBase):
+    id: str
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class PackageDetail(PackageBase):
+    id: str
+    created_at: datetime
 
     class Config:
         orm_mode = True
