@@ -11,6 +11,7 @@ databases:
     retention_days: 7
     max_backups: 5
     compression: "gzip"
+    package: true
   - id: "mongo-main"
     name: "my-mongo-db"
     engine: "mongodb"
@@ -23,3 +24,9 @@ databases:
     retention_days: 14
     max_backups: 10
     compression: "none"
+
+package-conf:
+  schedule: "0 5 * * *"
+  compression: "zip"
+  retention_days: 30
+  max_packages: 10
