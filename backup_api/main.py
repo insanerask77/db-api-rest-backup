@@ -5,7 +5,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from . import config
 from .database import create_db_and_tables, engine
 from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs, initialize_metrics
-from .routers import databases, backups
+from .routers import databases, backups, packages
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -14,15 +14,28 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 Instrumentator().instrument(app).expose(app)
 
+import yaml
+
 @app.on_event("startup")
 def startup_event():
     create_db_and_tables()
+
+    package_conf = {}
+    try:
+        with open("config.yaml", "r") as f:
+            config_data = yaml.safe_load(f)
+            package_conf = config_data.get("package-conf", {})
+    except FileNotFoundError:
+        logger.info("No config.yaml found, skipping package configuration.")
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing config.yaml for package config: {e}")
+
     with Session(engine) as session:
         config.load_and_sync_databases(session)
 
     scheduler.start()
     schedule_database_backups()
-    schedule_system_jobs()
+    schedule_system_jobs(package_conf)
     initialize_metrics()
 
 @app.on_event("shutdown")
@@ -31,3 +44,4 @@ def shutdown_event():
 
 app.include_router(databases.router, prefix="/databases", tags=["databases"])
 app.include_router(backups.router, prefix="/backups", tags=["backups"])
+app.include_router(packages.router, prefix="/packages", tags=["packages"])
