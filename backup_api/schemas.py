@@ -3,6 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 
 class DatabaseBase(BaseModel):
+    config_id: Optional[str] = None
     name: str
     engine: str
     host: str
@@ -18,6 +19,7 @@ class DatabaseCreate(DatabaseBase):
     password: str
 
 class DatabaseUpdate(BaseModel):
+    config_id: Optional[str] = None
     name: Optional[str] = None
     engine: Optional[str] = None
     host: Optional[str] = None
