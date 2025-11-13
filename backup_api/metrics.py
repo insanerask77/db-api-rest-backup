@@ -74,3 +74,23 @@ BACKUP_LAST_INTEGRITY_STATUS = Gauge(
     "Status of the last backup's integrity check (1 for success, 0 for failure).",
     ["database_name"]
 )
+
+PACKAGES_TOTAL = Gauge(
+    "packages_total",
+    "Total number of backup packages."
+)
+
+PACKAGES_SIZE_BYTES = Gauge(
+    "packages_size_bytes",
+    "Total disk space used by backup packages in bytes."
+)
+
+PACKAGE_LAST_STATUS = Gauge(
+    "package_last_status",
+    "Status of the last package creation (1 for success, 0 for failure)."
+)
+
+PACKAGES_ESTIMATED_CAPACITY = Gauge(
+    "packages_estimated_capacity",
+    "Estimated number of new packages that can be created with available disk space."
+)

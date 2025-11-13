@@ -7,18 +7,29 @@ import psutil
 from sqlmodel import Session, select
 from typing import Optional
 
-from .models import Database, Backup
+from .models import Database, Backup, Package
 from .backup_manager import run_backup, STORAGE_DIR
+from .packager import create_package
 from .database import engine
 from .metrics import (
     DISK_SPACE_AVAILABLE_BYTES, DISK_SPACE_USED_BYTES, DISK_SPACE_TOTAL_BYTES,
     RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL,
-    BACKUP_LAST_STATUS
+    BACKUP_LAST_STATUS, PACKAGES_ESTIMATED_CAPACITY
 )
+
+from apscheduler.executors.pool import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# This will be configured in main.py
 scheduler = BackgroundScheduler()
+
+def configure_scheduler(max_workers=10):
+    executors = {
+        'default': ThreadPoolExecutor(max_workers)
+    }
+    scheduler.configure(executors=executors)
 
 def update_disk_space_metric():
     if os.path.exists(STORAGE_DIR):
@@ -112,10 +123,61 @@ def enforce_retention(database_id: Optional[str] = None):
             if files_deleted_count > 0:
                 RETENTION_FILES_DELETED_TOTAL.labels(database_name=db.name).inc(files_deleted_count)
 
-def schedule_system_jobs():
+def schedule_system_jobs(package_conf=None):
     scheduler.add_job(enforce_retention, "cron", hour=1, id="retention_policy_job", name="Enforce Retention Policies", replace_existing=True)
     scheduler.add_job(update_disk_space_metric, "interval", minutes=5, id="disk_space_metric_job", name="Update Disk Space Metric", replace_existing=True)
-    logger.info("Scheduled system jobs (retention and metrics).")
+    scheduler.add_job(update_package_capacity_metric, "interval", minutes=15, id="package_capacity_metric_job", name="Update Package Capacity Metric", replace_existing=True)
+
+    if package_conf and package_conf.get('schedule'):
+        schedule_package_creation(package_conf)
+
+    logger.info("Scheduled system jobs (retention, metrics, and packaging).")
+
+def schedule_package_creation(package_conf):
+    job_id = "package_creation_job"
+
+    def job_wrapper():
+        with Session(engine) as session:
+            create_package(session, package_conf.get('compression', 'zip'))
+            enforce_package_retention(session, package_conf)
+
+    scheduler.add_job(
+        job_wrapper,
+        trigger=CronTrigger.from_crontab(package_conf['schedule'], timezone=os.getenv("TZ", "UTC")),
+        id=job_id,
+        name="Create Backup Package",
+        replace_existing=True,
+    )
+    logger.info(f"Scheduled package creation with schedule: '{package_conf['schedule']}'")
+
+def enforce_package_retention(session: Session, package_conf):
+    logger.info("Running package retention policy.")
+
+    retention_days = package_conf.get('retention_days')
+    max_packages = package_conf.get('max_packages')
+
+    if retention_days is not None:
+        cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
+        packages_to_delete = session.exec(
+            select(Package).where(Package.created_at < cutoff_date)
+        ).all()
+        for pkg in packages_to_delete:
+            if os.path.exists(pkg.storage_path):
+                os.remove(pkg.storage_path)
+            session.delete(pkg)
+            logger.info(f"Deleted old package '{pkg.id}' (time policy).")
+
+    if max_packages is not None:
+        all_packages = session.exec(select(Package).order_by(Package.created_at.desc())).all()
+        if len(all_packages) > max_packages:
+            packages_to_delete = all_packages[max_packages:]
+            for pkg in packages_to_delete:
+                if os.path.exists(pkg.storage_path):
+                    os.remove(pkg.storage_path)
+                session.delete(pkg)
+                logger.info(f"Deleted old package '{pkg.id}' (count policy).")
+
+    session.commit()
 
 def initialize_metrics():
     with Session(engine) as session:
@@ -123,3 +185,20 @@ def initialize_metrics():
         for db in databases:
             BACKUP_LAST_STATUS.labels(database_name=db.name).set(-1)
     logger.info("Initialized metrics for all databases.")
+
+def update_package_capacity_metric():
+    with Session(engine) as session:
+        packages = session.exec(select(Package)).all()
+        if not packages:
+            PACKAGES_ESTIMATED_CAPACITY.set(0)
+            return
+
+        total_size = sum(p.size_bytes for p in packages)
+        avg_size = total_size / len(packages)
+
+        if avg_size > 0:
+            disk_usage = psutil.disk_usage(STORAGE_DIR)
+            estimated_capacity = disk_usage.free / avg_size
+            PACKAGES_ESTIMATED_CAPACITY.set(estimated_capacity)
+        else:
+            PACKAGES_ESTIMATED_CAPACITY.set(0)
