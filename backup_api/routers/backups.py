@@ -6,8 +6,13 @@ from ..models import Database, Backup
 from ..schemas import BackupCreate, BackupInfo, BackupList, BackupDetail
 from ..database import get_session
 from .. import backup_manager
+from ..storage import get_storage_provider
+from ..config import load_config
+
 
 router = APIRouter()
+config = load_config()
+storage = get_storage_provider(config)
 
 @router.post("", response_model=BackupInfo)
 def create_backup(backup_req: BackupCreate, background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
@@ -41,3 +46,15 @@ def delete_backup(backup_id: str):
     if not backup_manager.delete_backup(backup_id):
         raise HTTPException(status_code=404, detail="Backup not found")
     return
+
+
+@router.get("/{backup_id}/download")
+def download_backup(backup_id: str, session: Session = Depends(get_session)):
+    backup = session.get(Backup, backup_id)
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup not found")
+
+    if not backup.storage_path:
+        raise HTTPException(status_code=404, detail="Backup has no file associated")
+
+    return storage.get_download_response(backup.storage_path)

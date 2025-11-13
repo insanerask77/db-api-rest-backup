@@ -3,6 +3,7 @@ import subprocess
 import hashlib
 import time
 import gzip
+import tempfile
 from datetime import datetime
 from sqlmodel import Session
 from .models import Backup, Database
@@ -12,8 +13,11 @@ from .metrics import (
     BACKUP_LAST_STATUS, BACKUP_LAST_SUCCESSFUL_SCHEDULED_TIMESTAMP_SECONDS,
     BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND, BACKUP_LAST_INTEGRITY_STATUS
 )
+from .storage import get_storage_provider
+from .config import load_config
 
-STORAGE_DIR = "data/backups"
+config = load_config()
+storage = get_storage_provider(config)
 
 def run_backup(backup_id: str, db_id: str):
     start_time = time.time()
@@ -30,13 +34,14 @@ def run_backup(backup_id: str, db_id: str):
             file_extension += ".gz"
 
         filename = f"{db.engine}_{db.database_name}_{timestamp}{file_extension}"
-        file_path = os.path.join(STORAGE_DIR, filename)
+        # The storage path will be relative, not absolute
+        storage_path = os.path.join("backups", filename)
         status = "failed"
 
-        try:
-            if not os.path.exists(STORAGE_DIR):
-                os.makedirs(STORAGE_DIR)
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_path = tmp_file.name
 
+        try:
             if db.engine == "postgres":
                 env = os.environ.copy()
                 env["PGPASSWORD"] = db.password
@@ -49,15 +54,17 @@ def run_backup(backup_id: str, db_id: str):
 
                 if result.returncode == 0:
                     if db.compression == "gzip":
-                        with gzip.open(file_path, "wb") as f:
+                        with gzip.open(tmp_path, "wb") as f:
                             f.write(result.stdout)
                     else:
-                        with open(file_path, "wb") as f:
+                        with open(tmp_path, "wb") as f:
                             f.write(result.stdout)
+                else:
+                     raise RuntimeError(f"Backup failed: {result.stderr.decode('utf-8')}")
 
             elif db.engine == "mongodb":
                 uri = f"mongodb://{db.username}:{db.password}@{db.host}:{db.port}/{db.database_name}?authSource=admin"
-                cmd = ["mongodump", f"--uri={uri}", f"--archive={file_path}"]
+                cmd = ["mongodump", f"--uri={uri}", f"--archive={tmp_path}"]
                 if db.compression == "gzip":
                     cmd.append("--gzip")
 
@@ -68,13 +75,15 @@ def run_backup(backup_id: str, db_id: str):
             if result.returncode != 0:
                 raise RuntimeError(f"Backup failed: {result.stderr}")
 
-            with open(file_path, "rb") as f:
+            storage.save(source_path=tmp_path, destination_path=storage_path)
+
+            with open(tmp_path, "rb") as f:
                 file_content = f.read()
                 backup.size_bytes = len(file_content)
                 backup.checksum = hashlib.md5(file_content).hexdigest()
                 BACKUP_SIZE_BYTES.labels(database_name=db.name).set(backup.size_bytes)
 
-            backup.storage_path = file_path
+            backup.storage_path = storage_path
             status = "completed"
             backup.log = result.stdout or result.stderr
 
@@ -82,6 +91,9 @@ def run_backup(backup_id: str, db_id: str):
             backup.log = str(e)
 
         finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
             duration = time.time() - start_time
             backup.finished_at = datetime.utcnow()
             backup.status = status
@@ -111,6 +123,23 @@ def run_backup(backup_id: str, db_id: str):
             else:
                 BACKUP_LAST_INTEGRITY_STATUS.labels(database_name=db.name).set(0)
 
+
+def create_and_run_backup_sync(db: Database, session: Session) -> Backup:
+    """
+    Creates, runs, and returns a backup synchronously.
+    """
+    new_backup = Backup(database_id=db.id, type="on-demand")
+    session.add(new_backup)
+    session.commit()
+    session.refresh(new_backup)
+
+    run_backup(new_backup.id, db.id)
+
+    # Re-fetch the backup to get its final status and details
+    session.refresh(new_backup)
+    return new_backup
+
+
 def delete_backup(backup_id: str) -> bool:
     with Session(engine) as session:
         backup = session.get(Backup, backup_id)
@@ -121,8 +150,8 @@ def delete_backup(backup_id: str) -> bool:
         if not db:
             return False
 
-        if backup.storage_path and os.path.exists(backup.storage_path):
-            os.remove(backup.storage_path)
+        if backup.storage_path:
+            storage.delete(backup.storage_path)
 
         session.delete(backup)
         session.commit()

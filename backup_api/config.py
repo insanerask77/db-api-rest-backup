@@ -6,15 +6,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def load_and_sync_databases(session: Session):
+
+def load_config():
     config_path = "config.yaml"
     if not os.path.exists(config_path):
-        logger.info("No config.yaml found, skipping predefined databases.")
-        return
-
+        return {}
     with open(config_path, "r") as f:
         try:
-            config_data = yaml.safe_load(f)
+            return yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing config.yaml: {e}")
+            return {}
+
+
+def load_and_sync_databases(session: Session):
+    config_data = load_config()
+    if not config_data:
+        logger.info("No config.yaml found or it's empty, skipping predefined databases.")
+        return
+
+    try:
             global_config = config_data.get("global", {})
             db_configs = config_data.get("databases", [])
 

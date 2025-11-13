@@ -12,6 +12,7 @@ services:
     depends_on:
       - postgres-db
       - mongo-db
+      - minio
     environment:
       - TZ=Europe/Madrid
 
@@ -36,6 +37,20 @@ services:
     ports:
       - "27017:27017"
 
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+
 volumes:
   postgres_data:
   mongo_data:
+  minio_data:

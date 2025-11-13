@@ -10,8 +10,12 @@ from backup_api.packager import create_package
 from backup_api.scheduler import schedule_package_creation
 import yaml
 import os
+from ..storage import get_storage_provider
+from ..config import load_config
 
 router = APIRouter()
+config = load_config()
+storage = get_storage_provider(config)
 
 def get_session():
     with Session(engine) as session:
@@ -37,8 +41,7 @@ def delete_package(package_id: str, session: Session = Depends(get_session)):
     pkg = session.get(Package, package_id)
     if pkg:
         size_bytes = pkg.size_bytes
-        if os.path.exists(pkg.storage_path):
-            os.remove(pkg.storage_path)
+        storage.delete(pkg.storage_path)
         session.delete(pkg)
         session.commit()
         PACKAGES_TOTAL.dec()
@@ -53,12 +56,24 @@ def delete_all_packages(session: Session = Depends(get_session)):
     for pkg in packages:
         total_size += pkg.size_bytes
         count += 1
-        if os.path.exists(pkg.storage_path):
-            os.remove(pkg.storage_path)
+        storage.delete(pkg.storage_path)
         session.delete(pkg)
     session.commit()
     PACKAGES_TOTAL.dec(count)
     PACKAGES_SIZE_BYTES.dec(total_size)
+
+
+@router.get("/{package_id}/download")
+def download_package(package_id: str, session: Session = Depends(get_session)):
+    """Download a specific backup package."""
+    pkg = session.get(Package, package_id)
+    if not pkg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Package not found")
+
+    if not pkg.storage_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Package has no file associated")
+
+    return storage.get_download_response(pkg.storage_path)
 
 @router.get("/configuration/", response_model=dict)
 def get_package_configuration():
