@@ -72,7 +72,6 @@ class S3Storage(StorageProvider):
 
     def save(self, source_path: str, destination_path: str) -> None:
         self.s3_client.upload_file(source_path, self.bucket, destination_path)
-        os.remove(source_path)
 
     def delete(self, file_path: str) -> None:
         self.s3_client.delete_object(Bucket=self.bucket, Key=file_path)

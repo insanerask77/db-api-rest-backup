@@ -77,11 +77,12 @@ def create_package(session: Session, compression: str = "zip"):
 
         package_storage_path = os.path.join("packages", f"{package_name}{ext}")
 
-        storage.save(source_path=package_tmp_path, destination_path=package_storage_path)
-
         size_bytes = os.path.getsize(package_tmp_path)
         with open(package_tmp_path, "rb") as f:
             checksum = hashlib.md5(f.read()).hexdigest()
+
+        storage.save(source_path=package_tmp_path, destination_path=package_storage_path)
+        os.remove(package_tmp_path)
 
         new_package = Package(
             storage_path=package_storage_path,

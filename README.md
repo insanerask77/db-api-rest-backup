@@ -1,88 +1,159 @@
 # Backup API
 
-This is a REST API for managing database backups. It allows you to register databases, create real backups using `pg_dump` and `mongodump`, schedule them, enforce retention policies, and monitor the system via Prometheus metrics.
+Backup API es un servicio RESTful robusto y configurable para gestionar y automatizar backups de bases de datos PostgreSQL y MongoDB. Permite programar tareas, aplicar políticas de retención, empaquetar backups y almacenar los archivos de forma segura en un almacenamiento local o en un bucket S3.
 
-**Important:** This application is designed to be run inside the provided Docker container to ensure that `pg_dump` and `mongodump` are available.
+[![Status](https://img.shields.io/badge/status-active-success.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)
 
-The application uses a persistent SQLite database (`backup.db`) to store all configurations and backup history.
+## ✨ Features
 
-## Features
+- **Soporte Multi-Base de Datos**: Compatible con **PostgreSQL** y **MongoDB**.
+- **Almacenamiento Flexible**: Guarda los backups en el **sistema de archivos local** o en cualquier **almacenamiento compatible con S3** (como Minio o AWS S3).
+- **Programación Avanzada**: Define calendarios de backup utilizando la sintaxis de **cron**.
+- **Políticas de Retención**: Controla el uso de espacio con políticas duales:
+    - **Por Antigüedad**: Elimina backups después de un número determinado de días.
+    - **Por Cantidad**: Conserva solo los `N` backups más recientes.
+- **Empaquetado de Backups**: Agrupa los backups más recientes de varias bases de datos en un único archivo `.zip` o `.tar.gz` para una fácil portabilidad.
+- **Configuración Centralizada**: Gestiona toda la configuración a través de un único archivo `config.yaml`.
+- **API RESTful**: Interactúa con el sistema a través de una API bien definida para gestionar bases de datos, backups y paquetes.
+- **Monitorización**: Endpoint `/metrics` compatible con **Prometheus** para una observabilidad completa del sistema.
+- **Integridad de Datos**: Cada backup se almacena con un **checksum MD5** para verificar su integridad.
+- **Contenerizado**: Listo para desplegar con Docker y Docker Compose.
 
-- **Database Support:** PostgreSQL and MongoDB.
-- **Dynamic Configuration:** Update any database parameter on the fly via the API.
-- **Backup Naming:** Backups are stored with a clear, descriptive name: `engine_dbname_timestamp`.
-- **Compression:** Configurable backup compression (`gzip` or `none`).
-- **Integrity:** Each backup includes an MD5 checksum to verify its integrity.
-- **Scheduling:** Cron-based scheduling with configurable timezone support.
-- **Retention Policies:** Dual-criteria retention (by age and by count), applied immediately after each backup.
-- **Monitoring:** Prometheus endpoint at `/metrics`.
+## 🚀 Instalación y Uso
 
-## Running the Full Environment with Docker Compose
+El entorno completo, incluyendo la API y las bases de datos para pruebas, se gestiona a través de Docker Compose.
 
-To test the complete solution, you can use Docker Compose to launch the backend API along with a PostgreSQL and a MongoDB database instance.
+**Requisitos**:
+- Docker
+- Docker Compose
 
-**1. Start the services:**
-```bash
-docker-compose up --build
-```
-This command will build the backend image, pull the database images, and start all three containers. The API will be available at `http://localhost:8000`.
+**Pasos:**
 
-**2. Stop the services:**
-To stop and remove the containers, run:
-```bash
-docker-compose down
-```
+1.  **Clona el repositorio:**
+    ```bash
+    git clone <repository-url>
+    cd backup-api
+    ```
 
-## Configuration
+2.  **Inicia los servicios:**
+    ```bash
+    docker compose up --build
+    ```
+    Este comando construirá la imagen de la API, levantará los contenedores (API, PostgreSQL, MongoDB y Minio) y los conectará.
 
-### Timezone
+3.  **Accede a la API:**
+    - **API URL**: `http://localhost:8000`
+    - **Documentación Interactiva (Swagger UI)**: `http://localhost:8000/docs`
 
-You can set the timezone for the application and the scheduler by modifying the `TZ` environment variable in the `docker-compose.yml` file.
+4.  **Detén los servicios:**
+    ```bash
+    docker compose down
+    ```
+
+## ⚙️ Configuración
+
+Toda la configuración de la aplicación se gestiona a través del archivo `config.yaml`. A continuación se describe la estructura completa.
+
+### Sección `global`
+
+Define valores por defecto que se aplicarán a todas las bases de datos que no tengan una configuración específica.
 
 ```yaml
-# In docker-compose.yml
-services:
-  backend:
-    # ...
-    environment:
-      - TZ=Europe/Madrid
+global:
+  schedule: "0 2 * * *"       # Cron schedule (ej. todos los días a las 2 AM)
+  compression: "gzip"       # "gzip" o "none"
+  retention_days: 14        # Días a retener los backups
+  max_backups: 10           # Número máximo de backups a retener
+  max_parallel_jobs: 10     # Hilos para ejecutar tareas en paralelo
 ```
 
-### Predefined Databases (`config.yaml`)
+### Sección `storage`
 
-This project supports loading a predefined list of databases at startup from a `config.yaml` file in the root of the project.
+Configura dónde se almacenarán los backups.
 
-An example `config.yaml` is provided:
+- **Tipo `local` (por defecto):**
+  ```yaml
+  storage:
+    type: local
+  ```
+  Los archivos se guardarán en el directorio `data/` dentro del contenedor.
+
+- **Tipo `s3`:**
+  ```yaml
+  storage:
+    type: s3
+    s3:
+      endpoint_url: "http://minio:9000"
+      access_key: "your-access-key"
+      secret_key: "your-secret-key"
+      bucket: "backups"
+  ```
+
+### Sección `databases`
+
+Define la lista de bases de datos a gestionar. Cada base de datos hereda la configuración de `global` a menos que se especifique lo contrario.
+
 ```yaml
 databases:
-  - name: "my-postgres-db"
+  - id: "pg_main_db"
+    name: "PostgreSQL Principal"
     engine: "postgres"
     host: "postgres-db"
     port: 5432
-    username_var: "POSTGRES_USER"
-    password_var: "POSTGRES_PASSWORD"
-    database_name: "testdb"
-    schedule: "0 3 * * *"
-    retention_days: 7
-    max_backups: 5
-    compression: "gzip"
+    username: "user"
+    password: "password"
+    database_name: "maindb"
+    schedule: "0 3 * * *"       # Sobrescribe el schedule global
+    retention_days: 30        # Sobrescribe la retención global
+    package: true               # Incluir en los paquetes de backup
+
+  - id: "mongo_logs_db"
+    name: "MongoDB de Logs"
+    engine: "mongodb"
+    host: "mongodb"
+    port: 27017
+    username: "mongo_user"
+    password: "mongo_password"
+    database_name: "logs"
+    max_backups: 5            # Sobrescribe el máximo de backups
+    package: true
 ```
 
-### Credential Management
+### Sección `package-conf`
 
-Database credentials are provided to the application via environment variables, which are defined in the `docker-compose.yml` file.
+Configura el proceso de empaquetado de backups.
 
-## Monitoring
+```yaml
+package-conf:
+  schedule: "0 5 * * *"       # Cron para crear el paquete (ej. 5 AM)
+  compression: "zip"          # "zip" o "tar.gz"
+  retention_days: 60
+  max_packages: 5
+```
 
-The application exposes a `/metrics` endpoint with Prometheus metrics. You can access them at `http://localhost:8000/metrics`.
+## 📋 API Endpoints Principales
 
-## API Endpoints
-- `GET /databases`: List the full configuration of all registered databases.
-- `POST /databases`: Register a new database.
-- `PATCH /databases/{database_id}`: Update any setting for a database (host, port, credentials, schedule, etc.).
-- `GET /backups`: List all backups.
-- `POST /backups`: Create a new on-demand backup.
-- `GET /backups/{backup_id}`: Get the details of a specific backup.
-- `GET /metrics`: Exposes Prometheus metrics.
+- `GET /databases`: Lista todas las bases de datos registradas.
+- `POST /databases`: Registra una nueva base de datos.
+- `PATCH /databases/{database_id}`: Actualiza la configuración de una base de datos.
+- `DELETE /databases/{database_id}`: Elimina una base de datos y su programación.
+- `GET /backups`: Lista todos los backups realizados.
+- `POST /backups`: Lanza un backup bajo demanda para una base de datos.
+- `GET /backups/{backup_id}`: Obtiene los detalles de un backup.
+- `DELETE /backups/{backup_id}`: Elimina un backup de la base de datos y del almacenamiento.
+- `GET /packages`: Lista todos los paquetes creados.
+- `POST /packages/create`: Lanza la creación de un paquete bajo demanda.
 
-You can find the full API documentation at `http://localhost:8000/docs`.
+Para una lista completa de endpoints y sus parámetros, consulta la [documentación interactiva](http://localhost:8000/docs).
+
+## 📊 Monitorización
+
+La aplicación expone métricas en formato Prometheus en el endpoint `/metrics`. Estas métricas incluyen:
+- Total de backups y su estado (completado, fallido).
+- Duración de los backups.
+- Tamaño de los backups.
+- Total de archivos eliminados por la política de retención.
+- Estado y tamaño de los paquetes.
+
+Puedes integrar este endpoint con tu instancia de Prometheus para crear dashboards y alertas.
