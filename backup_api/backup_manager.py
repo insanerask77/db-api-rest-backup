@@ -15,6 +15,7 @@ from .metrics import (
 )
 from .storage import get_storage_provider
 from .config import load_config
+from .error_parser import parse_backup_error
 
 config = load_config()
 storage = get_storage_provider(config)
@@ -75,20 +76,25 @@ def run_backup(backup_id: str, db_id: str):
             if result.returncode != 0:
                 raise RuntimeError(f"Backup failed: {result.stderr}")
 
-            storage.save(source_path=tmp_path, destination_path=storage_path)
-
             with open(tmp_path, "rb") as f:
                 file_content = f.read()
                 backup.size_bytes = len(file_content)
                 backup.checksum = hashlib.md5(file_content).hexdigest()
                 BACKUP_SIZE_BYTES.labels(database_name=db.name).set(backup.size_bytes)
 
+            storage.save(source_path=tmp_path, destination_path=storage_path)
+
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
             backup.storage_path = storage_path
             status = "completed"
             backup.log = result.stdout or result.stderr
 
         except Exception as e:
-            backup.log = str(e)
+            error_str = str(e)
+            backup.log = error_str
+            backup.error_summary = parse_backup_error(error_str, db.engine)
 
         finally:
             if os.path.exists(tmp_path):

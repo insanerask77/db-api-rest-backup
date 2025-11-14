@@ -80,6 +80,25 @@ def enforce_retention(database_id: Optional[str] = None):
         for db in dbs_to_check:
             RETENTION_POLICY_RUNS_TOTAL.labels(database_name=db.name).inc()
             files_deleted_count = 0
+
+            # Cleanup for orphaned failed backups
+            # These are backups that were uploaded but failed to record metadata correctly.
+            failed_cutoff_date = now - timedelta(days=db.retention_days or 7)
+            orphaned_backups = session.exec(
+                select(Backup).where(
+                    Backup.database_id == db.id,
+                    Backup.status == "failed",
+                    Backup.storage_path != None,
+                    Backup.finished_at < failed_cutoff_date,
+                )
+            ).all()
+
+            for backup in orphaned_backups:
+                logger.info(f"Deleting orphaned failed backup '{backup.id}' for '{db.name}'.")
+                storage.delete(backup.storage_path)
+                session.delete(backup)
+                files_deleted_count += 1
+
             # Time-based retention
             if db.retention_days is not None:
                 cutoff_date = now - timedelta(days=db.retention_days)

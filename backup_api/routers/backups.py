@@ -34,6 +34,14 @@ def list_backups(session: Session = Depends(get_session)):
     backups = session.exec(select(Backup)).all()
     return backups
 
+@router.get("/failed", response_model=List[BackupList])
+def list_failed_backups(session: Session = Depends(get_session)):
+    """
+    Get a list of all backups that have a 'failed' status.
+    """
+    failed_backups = session.exec(select(Backup).where(Backup.status == "failed")).all()
+    return failed_backups
+
 @router.get("/{backup_id}", response_model=BackupDetail)
 def get_backup_details(backup_id: str, session: Session = Depends(get_session)):
     backup = session.get(Backup, backup_id)
