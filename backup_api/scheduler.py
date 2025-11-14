@@ -8,14 +8,15 @@ from sqlmodel import Session, select
 from typing import Optional
 
 from .models import Database, Backup, Package
-from .backup_manager import run_backup, STORAGE_DIR
+from .backup_manager import run_backup
 from .packager import create_package
 from .database import engine
 from .metrics import (
-    DISK_SPACE_AVAILABLE_BYTES, DISK_SPACE_USED_BYTES, DISK_SPACE_TOTAL_BYTES,
     RETENTION_POLICY_RUNS_TOTAL, RETENTION_FILES_DELETED_TOTAL,
-    BACKUP_LAST_STATUS, PACKAGES_ESTIMATED_CAPACITY
+    BACKUP_LAST_STATUS
 )
+from .storage import get_storage_provider
+from .config import load_config
 
 from apscheduler.executors.pool import ThreadPoolExecutor
 
@@ -24,19 +25,14 @@ logger = logging.getLogger(__name__)
 
 # This will be configured in main.py
 scheduler = BackgroundScheduler()
+config = load_config()
+storage = get_storage_provider(config)
 
 def configure_scheduler(max_workers=10):
     executors = {
         'default': ThreadPoolExecutor(max_workers)
     }
     scheduler.configure(executors=executors)
-
-def update_disk_space_metric():
-    if os.path.exists(STORAGE_DIR):
-        disk_usage = psutil.disk_usage(STORAGE_DIR)
-        DISK_SPACE_AVAILABLE_BYTES.set(disk_usage.free)
-        DISK_SPACE_USED_BYTES.set(disk_usage.used)
-        DISK_SPACE_TOTAL_BYTES.set(disk_usage.total)
 
 def trigger_scheduled_backup(db_id: str):
     with Session(engine) as session:
@@ -84,6 +80,25 @@ def enforce_retention(database_id: Optional[str] = None):
         for db in dbs_to_check:
             RETENTION_POLICY_RUNS_TOTAL.labels(database_name=db.name).inc()
             files_deleted_count = 0
+
+            # Cleanup for orphaned failed backups
+            # These are backups that were uploaded but failed to record metadata correctly.
+            failed_cutoff_date = now - timedelta(days=db.retention_days or 7)
+            orphaned_backups = session.exec(
+                select(Backup).where(
+                    Backup.database_id == db.id,
+                    Backup.status == "failed",
+                    Backup.storage_path != None,
+                    Backup.finished_at < failed_cutoff_date,
+                )
+            ).all()
+
+            for backup in orphaned_backups:
+                logger.info(f"Deleting orphaned failed backup '{backup.id}' for '{db.name}'.")
+                storage.delete(backup.storage_path)
+                session.delete(backup)
+                files_deleted_count += 1
+
             # Time-based retention
             if db.retention_days is not None:
                 cutoff_date = now - timedelta(days=db.retention_days)
@@ -95,8 +110,8 @@ def enforce_retention(database_id: Optional[str] = None):
                     )
                 ).all()
                 for backup in backups_to_delete:
-                    if backup.storage_path and os.path.exists(backup.storage_path):
-                        os.remove(backup.storage_path)
+                    if backup.storage_path:
+                        storage.delete(backup.storage_path)
                         files_deleted_count += 1
                     session.delete(backup)
                     logger.info(f"Deleted old backup '{backup.id}' for '{db.name}' (time policy).")
@@ -113,8 +128,8 @@ def enforce_retention(database_id: Optional[str] = None):
                 if len(all_backups) > db.max_backups:
                     backups_to_delete = all_backups[db.max_backups:]
                     for backup in backups_to_delete:
-                        if backup.storage_path and os.path.exists(backup.storage_path):
-                            os.remove(backup.storage_path)
+                        if backup.storage_path:
+                            storage.delete(backup.storage_path)
                             files_deleted_count += 1
                         session.delete(backup)
                         logger.info(f"Deleted old backup '{backup.id}' for '{db.name}' (count policy).")
@@ -125,8 +140,6 @@ def enforce_retention(database_id: Optional[str] = None):
 
 def schedule_system_jobs(package_conf=None):
     scheduler.add_job(enforce_retention, "cron", hour=1, id="retention_policy_job", name="Enforce Retention Policies", replace_existing=True)
-    scheduler.add_job(update_disk_space_metric, "interval", minutes=5, id="disk_space_metric_job", name="Update Disk Space Metric", replace_existing=True)
-    scheduler.add_job(update_package_capacity_metric, "interval", minutes=15, id="package_capacity_metric_job", name="Update Package Capacity Metric", replace_existing=True)
 
     if package_conf and package_conf.get('schedule'):
         schedule_package_creation(package_conf)
@@ -162,8 +175,7 @@ def enforce_package_retention(session: Session, package_conf):
             select(Package).where(Package.created_at < cutoff_date)
         ).all()
         for pkg in packages_to_delete:
-            if os.path.exists(pkg.storage_path):
-                os.remove(pkg.storage_path)
+            storage.delete(pkg.storage_path)
             session.delete(pkg)
             logger.info(f"Deleted old package '{pkg.id}' (time policy).")
 
@@ -172,8 +184,7 @@ def enforce_package_retention(session: Session, package_conf):
         if len(all_packages) > max_packages:
             packages_to_delete = all_packages[max_packages:]
             for pkg in packages_to_delete:
-                if os.path.exists(pkg.storage_path):
-                    os.remove(pkg.storage_path)
+                storage.delete(pkg.storage_path)
                 session.delete(pkg)
                 logger.info(f"Deleted old package '{pkg.id}' (count policy).")
 
@@ -185,20 +196,3 @@ def initialize_metrics():
         for db in databases:
             BACKUP_LAST_STATUS.labels(database_name=db.name).set(-1)
     logger.info("Initialized metrics for all databases.")
-
-def update_package_capacity_metric():
-    with Session(engine) as session:
-        packages = session.exec(select(Package)).all()
-        if not packages:
-            PACKAGES_ESTIMATED_CAPACITY.set(0)
-            return
-
-        total_size = sum(p.size_bytes for p in packages)
-        avg_size = total_size / len(packages)
-
-        if avg_size > 0:
-            disk_usage = psutil.disk_usage(STORAGE_DIR)
-            estimated_capacity = disk_usage.free / avg_size
-            PACKAGES_ESTIMATED_CAPACITY.set(estimated_capacity)
-        else:
-            PACKAGES_ESTIMATED_CAPACITY.set(0)

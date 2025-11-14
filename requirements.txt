@@ -6,3 +6,4 @@ sqlmodel
 pyyaml
 prometheus-fastapi-instrumentator
 psutil
+boto3
