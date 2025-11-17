@@ -61,7 +61,6 @@ class PackageDetail(PackageBase):
 
 class BackupCreate(BaseModel):
     database_id: str
-    type: str
 
 class BackupInfo(BaseModel):
     id: str
