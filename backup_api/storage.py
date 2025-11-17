@@ -5,6 +5,10 @@ from fastapi.responses import FileResponse, RedirectResponse
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
+from .logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class StorageProvider(abc.ABC):
     @abc.abstractmethod
@@ -83,7 +87,7 @@ class S3Storage(StorageProvider):
             self.s3_client.delete_object(Bucket=self.bucket, Key=file_path)
             return True
         except ClientError as e:
-            print(f"Failed to delete {file_path} from S3: {e}")
+            logger.error(f"Failed to delete {file_path} from S3: {e}")
             return False
 
     def get_download_response(self, file_path: str) -> RedirectResponse:

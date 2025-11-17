@@ -6,10 +6,10 @@ from . import config
 from .database import create_db_and_tables, engine
 from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs, initialize_metrics, configure_scheduler
 from .routers import databases, backups, packages, system
-import logging
+from .logger import setup_logging, get_logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+setup_logging()
+logger = get_logger(__name__)
 
 app = FastAPI()
 Instrumentator().instrument(app).expose(app)
