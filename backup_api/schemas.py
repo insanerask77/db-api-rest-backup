@@ -40,6 +40,32 @@ class DatabaseDetail(DatabaseBase):
     class Config:
         from_attributes = True
 
+
+class RestoreBase(BaseModel):
+    database_id: str
+    backup_id: Optional[str] = None
+
+class RestoreCreate(RestoreBase):
+    pass
+
+class RestoreList(BaseModel):
+    id: str
+    database_id: str
+    backup_id: Optional[str]
+    status: str
+    created_at: datetime
+    finished_at: Optional[datetime] = None
+    error_summary: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class RestoreDetail(RestoreList):
+    log: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class PackageBase(BaseModel):
     storage_path: str
     size_bytes: int

@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File
 from sqlmodel import Session, select
 from typing import List
+import tempfile
+import shutil
+import os
 
-from ..models import Database
+from ..models import Database, Restore
 from ..schemas import DatabaseCreate, DatabaseDetail, DatabaseUpdate
 from ..database import get_session
 from ..scheduler import schedule_database_backups, scheduler
+from ..dependencies import get_settings
+from ..restore_manager import run_restore
 
 router = APIRouter()
 
@@ -121,3 +126,57 @@ def reset_database_to_static(database_id: str, session: Session = Depends(get_se
             detail="The original static configuration for this database no longer exists in config.yaml. "
                    "The database has been permanently deleted."
         )
+
+
+def check_restore_mode(settings: dict = Depends(get_settings)):
+    if not settings.get("restore_mode"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Restore mode is not enabled in the configuration.",
+        )
+
+@router.post("/{database_id}/restore-from-upload", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(check_restore_mode)])
+async def restore_from_upload(
+    database_id: str,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    """
+    Restore a database from an uploaded backup file.
+    """
+    db = session.get(Database, database_id)
+    if not db or db.is_deleted:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    restore = Restore(database_id=db.id)
+    session.add(restore)
+    session.commit()
+    session.refresh(restore)
+
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+
+    try:
+        with temp_file as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        background_tasks.add_task(
+            run_restore,
+            db_session=session,
+            restore_id=restore.id,
+            db=db,
+            backup_file_path=temp_file.name,
+        )
+        background_tasks.add_task(os.unlink, temp_file.name)
+
+    except Exception as e:
+        os.unlink(temp_file.name)
+        restore.status = "failed"
+        restore.error_summary = f"Failed to prepare restore from upload: {e}"
+        session.add(restore)
+        session.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to start restore process: {e}")
+    finally:
+        file.file.close()
+
+    return {"message": "Restore process started.", "restore_id": restore.id}

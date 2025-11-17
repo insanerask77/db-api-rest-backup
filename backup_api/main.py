@@ -5,7 +5,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from . import config
 from .database import create_db_and_tables, engine
 from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs, initialize_metrics, configure_scheduler
-from .routers import databases, backups, packages, system
+from .routers import databases, backups, packages, system, restores
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -51,3 +51,4 @@ app.include_router(databases.router, prefix="/databases", tags=["databases"])
 app.include_router(backups.router, prefix="/backups", tags=["backups"])
 app.include_router(packages.router, prefix="/packages", tags=["packages"])
 app.include_router(system.router, prefix="/system", tags=["system"])
+app.include_router(restores.router, prefix="/restores", tags=["restores"])

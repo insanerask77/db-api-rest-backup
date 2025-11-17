@@ -4,6 +4,7 @@ global:
   retention_days: 15
   max_backups: 10
   max_parallel_jobs: 3
+  restore_mode: true
 
 # Optional: Configure storage backend. Defaults to local storage in 'data/' if omitted.
 # To use S3-compatible storage, uncomment and configure the section below.

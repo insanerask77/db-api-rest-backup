@@ -40,3 +40,14 @@ class Backup(SQLModel, table=True):
     checksum: Optional[str] = None
     log: Optional[str] = None
     error_summary: Optional[str] = None
+
+
+class Restore(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: f"rst_{uuid.uuid4().hex[:6]}", primary_key=True)
+    database_id: str = Field(foreign_key="database.id")
+    backup_id: Optional[str] = Field(foreign_key="backup.id", default=None)
+    status: str = "running"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    finished_at: Optional[datetime] = None
+    log: Optional[str] = None
+    error_summary: Optional[str] = None
