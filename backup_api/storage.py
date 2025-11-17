@@ -1,7 +1,9 @@
 # backup_api/storage.py
 import abc
 import os
-from fastapi.responses import FileResponse, RedirectResponse
+import tempfile
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
@@ -16,7 +18,7 @@ class StorageProvider(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_download_response(self, file_path: str) -> FileResponse | RedirectResponse:
+    def get_download_response(self, file_path: str) -> FileResponse:
         pass
 
     @abc.abstractmethod
@@ -86,13 +88,27 @@ class S3Storage(StorageProvider):
             print(f"Failed to delete {file_path} from S3: {e}")
             return False
 
-    def get_download_response(self, file_path: str) -> RedirectResponse:
-        url = self.s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': self.bucket, 'Key': file_path},
-            ExpiresIn=3600  # 1 hour
-        )
-        return RedirectResponse(url=url)
+    def get_download_response(self, file_path: str) -> FileResponse:
+        # Create a temporary file to download the S3 object to
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        try:
+            self.s3_client.download_fileobj(self.bucket, file_path, temp_file)
+            temp_file.close()
+            # The file must be closed before it can be sent.
+            # We use a background task to clean up the file after the response is sent.
+            cleanup_task = BackgroundTask(os.unlink, temp_file.name)
+            return FileResponse(
+                path=temp_file.name,
+                filename=os.path.basename(file_path),
+                background=cleanup_task
+            )
+        except ClientError as e:
+            # If the file doesn't exist on S3 or another error occurs
+            os.unlink(temp_file.name)
+            raise e
+        except Exception:
+            os.unlink(temp_file.name)
+            raise
 
     def download_file(self, file_path: str, destination_path: str) -> None:
         self.s3_client.download_file(self.bucket, file_path, destination_path)
