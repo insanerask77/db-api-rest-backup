@@ -118,6 +118,7 @@ def overwrite_static_config(yaml_content: str, session: Session):
     static_dbs = session.exec(select(Database).where(Database.config_id != None)).all()
     for db in static_dbs:
         session.delete(db)
+    session.flush()
 
     # Logic adapted from load_and_sync_databases
     try:
@@ -167,6 +168,7 @@ def overwrite_static_config(yaml_content: str, session: Session):
                 logger.warning(f"Skipping database with id '{config_id}' from uploaded YAML due to missing credentials.")
                 continue
 
+            config.pop('id', None)
             logger.info(f"Creating new database configuration from uploaded YAML for config_id='{config_id}'.")
             db = Database(config_id=config_id, **config)
             session.add(db)
