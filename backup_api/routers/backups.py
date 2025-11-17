@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlmodel import Session, select
 from typing import List
 
@@ -56,8 +56,10 @@ def delete_backup(backup_id: str):
     return
 
 
+from fastapi.responses import RedirectResponse, JSONResponse
+
 @router.get("/{backup_id}/download")
-def download_backup(backup_id: str, session: Session = Depends(get_session)):
+def download_backup(backup_id: str, request: Request, session: Session = Depends(get_session)):
     backup = session.get(Backup, backup_id)
     if not backup:
         raise HTTPException(status_code=404, detail="Backup not found")
@@ -65,4 +67,11 @@ def download_backup(backup_id: str, session: Session = Depends(get_session)):
     if not backup.storage_path:
         raise HTTPException(status_code=404, detail="Backup has no file associated")
 
-    return storage.get_download_response(backup.storage_path)
+    response = storage.get_download_response(backup.storage_path)
+
+    # If the client (like Swagger UI) prefers JSON, and we have a redirect,
+    # return the URL in a JSON payload instead of a redirect response.
+    if "application/json" in request.headers.get("accept", "") and isinstance(response, RedirectResponse):
+        return JSONResponse(content={"download_url": response.headers["location"]})
+
+    return response

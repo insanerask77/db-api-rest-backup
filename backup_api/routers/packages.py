@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
 from typing import List
 
@@ -68,8 +68,10 @@ def delete_all_packages(session: Session = Depends(get_session)):
     PACKAGES_SIZE_BYTES.dec(total_size)
 
 
+from fastapi.responses import RedirectResponse, JSONResponse
+
 @router.get("/{package_id}/download")
-def download_package(package_id: str, session: Session = Depends(get_session)):
+def download_package(package_id: str, request: Request, session: Session = Depends(get_session)):
     """Download a specific backup package."""
     pkg = session.get(Package, package_id)
     if not pkg:
@@ -78,7 +80,14 @@ def download_package(package_id: str, session: Session = Depends(get_session)):
     if not pkg.storage_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Package has no file associated")
 
-    return storage.get_download_response(pkg.storage_path)
+    response = storage.get_download_response(pkg.storage_path)
+
+    # If the client (like Swagger UI) prefers JSON, and we have a redirect,
+    # return the URL in a JSON payload instead of a redirect response.
+    if "application/json" in request.headers.get("accept", "") and isinstance(response, RedirectResponse):
+        return JSONResponse(content={"download_url": response.headers["location"]})
+
+    return response
 
 @router.get("/configuration/", response_model=dict)
 def get_package_configuration():
