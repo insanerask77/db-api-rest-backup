@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -12,6 +13,17 @@ setup_logging()
 logger = get_logger(__name__)
 
 app = FastAPI()
+
+# This is a permissive CORS configuration for development.
+# For production, you should restrict the origins to your frontend's domain.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 Instrumentator().instrument(app).expose(app)
 
 import yaml
