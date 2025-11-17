@@ -81,6 +81,18 @@ def load_and_sync_databases(session: Session):
             config.pop('id')
 
             if existing_db:
+                if existing_db.override_static_config:
+                    logger.info(
+                        f"Skipping update for config_id='{config_id}' because it is managed by the API."
+                    )
+                    continue
+
+                if existing_db.is_deleted:
+                    logger.info(
+                        f"Skipping update for config_id='{config_id}' because it has been deleted via the API."
+                    )
+                    continue
+
                 logger.info(f"Updating database configuration for config_id='{config_id}'.")
                 update_data = {k: v for k, v in config.items() if getattr(existing_db, k, None) != v}
                 logger.debug(f"Updating fields: {list(update_data.keys())} for db config_id='{config_id}'")

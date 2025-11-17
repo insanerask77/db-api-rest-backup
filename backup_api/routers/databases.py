@@ -57,6 +57,9 @@ def update_database(database_id: str, db_update: DatabaseUpdate, session: Sessio
     for key, value in update_data.items():
         setattr(db, key, value)
 
+    if db.config_id:
+        db.override_static_config = True
+
     session.add(db)
     session.commit()
     session.refresh(db)
@@ -83,3 +86,52 @@ def delete_database(database_id: str, session: Session = Depends(get_session)):
     session.commit()
     logger.info(f"Successfully deleted database with id: {database_id}")
     return
+
+
+@router.post("/{database_id}/reset", response_model=DatabaseDetail)
+def reset_database_to_static(database_id: str, session: Session = Depends(get_session)):
+    from ..config import load_config
+
+    db = session.get(Database, database_id)
+    if not db:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    if not db.config_id:
+        raise HTTPException(
+            status_code=400,
+            detail="This operation is only valid for databases managed by the static config.yaml."
+        )
+
+    config_data = load_config()
+    db_configs = config_data.get("databases", [])
+    static_config = next((c for c in db_configs if c.get('id') == db.config_id), None)
+
+    if static_config:
+        # Reset the database to the static configuration
+        static_config.pop('id', None)
+        for key, value in static_config.items():
+            setattr(db, key, value)
+
+        db.override_static_config = False
+        db.is_deleted = False
+
+        session.add(db)
+        session.commit()
+        session.refresh(db)
+
+        schedule_database_backups()
+
+        return db
+    else:
+        # If the config no longer exists in yaml, delete it permanently
+        job_id = f"backup_{db.id}"
+        if scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+
+        session.delete(db)
+        session.commit()
+        raise HTTPException(
+            status_code=404,
+            detail="The original static configuration for this database no longer exists in config.yaml. "
+                   "The database has been permanently deleted."
+        )

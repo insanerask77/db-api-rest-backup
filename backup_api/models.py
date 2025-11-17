@@ -18,6 +18,8 @@ class Database(SQLModel, table=True):
     max_backups: Optional[int] = None
     compression: str = "none"
     package: bool = Field(default=False)
+    override_static_config: bool = Field(default=False)
+    is_deleted: bool = Field(default=False, index=True)
 
 class Package(SQLModel, table=True):
     id: str = Field(default_factory=lambda: f"pkg_{uuid.uuid4().hex[:6]}", primary_key=True)
