@@ -15,6 +15,7 @@ from .metrics import (
 )
 from .storage import get_storage_provider
 from .config import load_config
+from .error_parser import parse_backup_error
 
 config = load_config()
 storage = get_storage_provider(config)
@@ -91,7 +92,9 @@ def run_backup(backup_id: str, db_id: str):
             backup.log = result.stdout or result.stderr
 
         except Exception as e:
-            backup.log = str(e)
+            error_str = str(e)
+            backup.log = error_str
+            backup.error_summary = parse_backup_error(error_str, db.engine)
 
         finally:
             if os.path.exists(tmp_path):
