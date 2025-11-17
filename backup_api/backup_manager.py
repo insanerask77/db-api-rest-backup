@@ -41,26 +41,46 @@ def run_backup(backup_id: str, db_id: str):
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_path = tmp_file.name
 
+        log_output = ""
         try:
             if db.engine == "postgres":
                 env = os.environ.copy()
                 env["PGPASSWORD"] = db.password
-                cmd = [
+                pg_dump_cmd = [
                     "pg_dump", "-h", db.host, "-p", str(db.port), "-U", db.username,
                     "-d", db.database_name, "--format=c"
                 ]
 
-                result = subprocess.run(cmd, env=env, capture_output=True)
-
-                if result.returncode == 0:
+                with open(tmp_path, "wb") as f:
                     if db.compression == "gzip":
-                        with gzip.open(tmp_path, "wb") as f:
-                            f.write(result.stdout)
+                        p1 = subprocess.Popen(pg_dump_cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        p2 = subprocess.Popen(["gzip"], stdin=p1.stdout, stdout=f, stderr=subprocess.PIPE)
+                        p1.stdout.close()
+
+                        p1_stderr = p1.stderr.read()
+                        p2_stderr = p2.stderr.read()
+                        p1.stderr.close()
+                        p2.stderr.close()
+
+                        p1_rc = p1.wait()
+                        p2_rc = p2.wait()
+
+                        log_output = (p1_stderr + p2_stderr).decode('utf-8')
+
+                        if p1_rc != 0:
+                            raise RuntimeError(f"pg_dump failed with exit code {p1_rc}: {log_output}")
+                        if p2_rc != 0:
+                            raise RuntimeError(f"gzip failed with exit code {p2_rc}: {log_output}")
                     else:
-                        with open(tmp_path, "wb") as f:
-                            f.write(result.stdout)
-                else:
-                     raise RuntimeError(f"Backup failed: {result.stderr.decode('utf-8')}")
+                        p = subprocess.Popen(pg_dump_cmd, env=env, stdout=f, stderr=subprocess.PIPE)
+                        p_stderr = p.stderr.read()
+                        p.stderr.close()
+                        p_rc = p.wait()
+
+                        log_output = p_stderr.decode('utf-8')
+
+                        if p_rc != 0:
+                            raise RuntimeError(f"Backup failed with exit code {p_rc}: {log_output}")
 
             elif db.engine == "mongodb":
                 uri = f"mongodb://{db.username}:{db.password}@{db.host}:{db.port}/{db.database_name}?authSource=admin"
@@ -69,11 +89,12 @@ def run_backup(backup_id: str, db_id: str):
                     cmd.append("--gzip")
 
                 result = subprocess.run(cmd, capture_output=True, text=True)
+                log_output = result.stderr
+
+                if result.returncode != 0:
+                    raise RuntimeError(f"Backup failed: {log_output}")
             else:
                 raise ValueError(f"Unsupported database engine: {db.engine}")
-
-            if result.returncode != 0:
-                raise RuntimeError(f"Backup failed: {result.stderr}")
 
             with open(tmp_path, "rb") as f:
                 file_content = f.read()
@@ -88,10 +109,12 @@ def run_backup(backup_id: str, db_id: str):
 
             backup.storage_path = storage_path
             status = "completed"
-            backup.log = result.stdout or result.stderr
+            backup.log = log_output
 
         except Exception as e:
             backup.log = str(e)
+            if log_output:
+                backup.log += f"\nProcess stderr:\n{log_output}"
 
         finally:
             if os.path.exists(tmp_path):
