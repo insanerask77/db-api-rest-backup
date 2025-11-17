@@ -4,8 +4,10 @@ from sqlmodel import Session
 from backup_api.database import engine
 from backup_api.config import load_and_sync_databases, overwrite_static_config
 from backup_api.scheduler import schedule_database_backups
+from ..logger import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 def get_session():
     with Session(engine) as session:
@@ -14,8 +16,10 @@ def get_session():
 @router.post("/reload-databases", status_code=status.HTTP_204_NO_CONTENT)
 def reload_databases_config(session: Session = Depends(get_session)):
     """Reload database configurations from config.yaml and update scheduler."""
+    logger.info("Reloading database configurations from config.yaml.")
     load_and_sync_databases(session)
     schedule_database_backups()
+    logger.info("Database configurations reloaded and scheduler updated.")
 
 @router.put("/config", status_code=status.HTTP_204_NO_CONTENT)
 async def upload_config(
@@ -28,7 +32,9 @@ async def upload_config(
     and replace them with the content of the uploaded file.
     Configurations created via API will be unaffected.
     """
+    logger.info(f"Received request to upload new config file: {file.filename}")
     if not file.filename.endswith((".yaml", ".yml")):
+        logger.warning(f"Invalid file type uploaded: {file.filename}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid file type. Please upload a .yaml or .yml file."
@@ -38,6 +44,7 @@ async def upload_config(
         content = await file.read()
         overwrite_static_config(content, session)
         schedule_database_backups()
+        logger.info("Successfully overwrote static configurations and updated scheduler.")
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

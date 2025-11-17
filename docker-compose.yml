@@ -17,6 +17,7 @@ services:
       minio:
         condition: service_healthy
     environment:
+      - LOG_LEVEL=INFO
       - TZ=Europe/Madrid
       - no_proxy=localhost,127.0.0.1,0.0.0.0,minio,postgres-db,mongo-db
 

@@ -2,9 +2,9 @@ import yaml
 import os
 from sqlmodel import Session, select
 from .models import Database
-import logging
+from .logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def load_config():
@@ -28,6 +28,8 @@ def load_and_sync_databases(session: Session):
     try:
         global_config = config_data.get("global", {})
         db_configs = config_data.get("databases", [])
+        logger.debug(f"Found {len(db_configs)} database configurations in config.yaml.")
+        logger.debug(f"Global config: {global_config}")
 
         if not db_configs:
             return
@@ -49,6 +51,7 @@ def load_and_sync_databases(session: Session):
             # Apply global defaults
             for key, value in global_config.items():
                 if key in db_defaults and key not in config:
+                    logger.debug(f"Applying global default '{key}={value}' to a db config.")
                     config[key] = value
 
             config_id = config.get('id')
@@ -91,6 +94,8 @@ def load_and_sync_databases(session: Session):
                     continue
 
                 logger.info(f"Updating database configuration for config_id='{config_id}'.")
+                update_data = {k: v for k, v in config.items() if getattr(existing_db, k, None) != v}
+                logger.debug(f"Updating fields: {list(update_data.keys())} for db config_id='{config_id}'")
                 for key, value in config.items():
                     setattr(existing_db, key, value)
                 session.add(existing_db)
@@ -128,6 +133,7 @@ def overwrite_static_config(yaml_content: str, session: Session):
     # Delete all existing databases that were loaded from a static config
     logger.info("Deleting all existing static database configurations.")
     static_dbs = session.exec(select(Database).where(Database.config_id != None)).all()
+    logger.debug(f"Found {len(static_dbs)} static dbs to delete.")
     for db in static_dbs:
         session.delete(db)
     session.flush()

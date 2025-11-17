@@ -2,7 +2,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timedelta
 import os
-import logging
 import psutil
 from sqlmodel import Session, select
 from typing import Optional
@@ -17,11 +16,11 @@ from .metrics import (
 )
 from .storage import get_storage_provider
 from .config import load_config
+from .logger import get_logger
 
 from apscheduler.executors.pool import ThreadPoolExecutor
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # This will be configured in main.py
 scheduler = BackgroundScheduler()
@@ -39,6 +38,7 @@ def trigger_scheduled_backup(db_id: str):
         db = session.get(Database, db_id)
         if db:
             logger.info(f"Triggering scheduled backup for database: {db.name}")
+            logger.debug(f"Creating new backup entry for db_id: {db_id}")
             new_backup = Backup(database_id=db.id, type="scheduled")
             session.add(new_backup)
             session.commit()
@@ -48,9 +48,11 @@ def trigger_scheduled_backup(db_id: str):
 def schedule_database_backups():
     with Session(engine) as session:
         databases = session.exec(select(Database)).all()
+        logger.debug(f"Scheduling backups for {len(databases)} databases.")
         for db in databases:
             job_id = f"backup_{db.id}"
             if db.schedule:
+                logger.debug(f"Scheduling job '{job_id}' for database '{db.name}' with schedule: '{db.schedule}'")
                 scheduler.add_job(
                     trigger_scheduled_backup,
                     trigger=CronTrigger.from_crontab(db.schedule, timezone=os.getenv("TZ", "UTC")),
@@ -93,6 +95,7 @@ def enforce_retention(database_id: Optional[str] = None):
                 )
             ).all()
 
+            logger.debug(f"Found {len(orphaned_backups)} orphaned failed backups to delete for db '{db.name}'.")
             for backup in orphaned_backups:
                 logger.info(f"Deleting orphaned failed backup '{backup.id}' for '{db.name}'.")
                 storage.delete(backup.storage_path)
@@ -109,6 +112,7 @@ def enforce_retention(database_id: Optional[str] = None):
                         Backup.finished_at < cutoff_date
                     )
                 ).all()
+                logger.debug(f"Found {len(backups_to_delete)} backups to delete for db '{db.name}' based on time policy (retention_days={db.retention_days}).")
                 for backup in backups_to_delete:
                     if backup.storage_path:
                         storage.delete(backup.storage_path)
@@ -127,6 +131,7 @@ def enforce_retention(database_id: Optional[str] = None):
 
                 if len(all_backups) > db.max_backups:
                     backups_to_delete = all_backups[db.max_backups:]
+                    logger.debug(f"Found {len(backups_to_delete)} backups to delete for db '{db.name}' based on count policy (max_backups={db.max_backups}).")
                     for backup in backups_to_delete:
                         if backup.storage_path:
                             storage.delete(backup.storage_path)
@@ -148,6 +153,7 @@ def schedule_system_jobs(package_conf=None):
 
 def schedule_package_creation(package_conf):
     job_id = "package_creation_job"
+    logger.debug(f"Scheduling package creation with config: {package_conf}")
 
     def job_wrapper():
         with Session(engine) as session:
@@ -174,6 +180,7 @@ def enforce_package_retention(session: Session, package_conf):
         packages_to_delete = session.exec(
             select(Package).where(Package.created_at < cutoff_date)
         ).all()
+        logger.debug(f"Found {len(packages_to_delete)} packages to delete based on time policy (retention_days={retention_days}).")
         for pkg in packages_to_delete:
             storage.delete(pkg.storage_path)
             session.delete(pkg)
@@ -183,6 +190,7 @@ def enforce_package_retention(session: Session, package_conf):
         all_packages = session.exec(select(Package).order_by(Package.created_at.desc())).all()
         if len(all_packages) > max_packages:
             packages_to_delete = all_packages[max_packages:]
+            logger.debug(f"Found {len(packages_to_delete)} packages to delete based on count policy (max_packages={max_packages}).")
             for pkg in packages_to_delete:
                 storage.delete(pkg.storage_path)
                 session.delete(pkg)

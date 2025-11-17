@@ -16,18 +16,25 @@ from .metrics import (
 from .storage import get_storage_provider
 from .config import load_config
 from .error_parser import parse_backup_error
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 config = load_config()
 storage = get_storage_provider(config)
 
 def run_backup(backup_id: str, db_id: str):
+    logger.info(f"Starting backup run for backup_id: {backup_id}, db_id: {db_id}")
     start_time = time.time()
     with Session(engine) as session:
         backup = session.get(Backup, backup_id)
         db = session.get(Database, db_id)
 
         if not backup or not db:
+            logger.error(f"Backup or Database not found for backup_id: {backup_id}, db_id: {db_id}")
             return
+
+        logger.debug(f"Database details: host={db.host}, port={db.port}, user={db.username}, db_name={db.database_name}")
 
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         file_extension = ".sql" if db.engine == "postgres" else ".archive"
@@ -35,8 +42,8 @@ def run_backup(backup_id: str, db_id: str):
             file_extension += ".gz"
 
         filename = f"{db.engine}_{db.database_name}_{timestamp}{file_extension}"
-        # The storage path will be relative, not absolute
         storage_path = os.path.join("backups", filename)
+        logger.info(f"Backup filename: {filename}, storage_path: {storage_path}")
         status = "failed"
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
@@ -47,10 +54,13 @@ def run_backup(backup_id: str, db_id: str):
             if db.engine == "postgres":
                 env = os.environ.copy()
                 env["PGPASSWORD"] = db.password
+                env = os.environ.copy()
+                env["PGPASSWORD"] = db.password
                 pg_dump_cmd = [
                     "pg_dump", "-h", db.host, "-p", str(db.port), "-U", db.username,
                     "-d", db.database_name, "--format=c"
                 ]
+                logger.debug(f"Executing pg_dump command: {' '.join(pg_dump_cmd)}")
 
                 with open(tmp_path, "wb") as f:
                     if db.compression == "gzip":
@@ -84,8 +94,11 @@ def run_backup(backup_id: str, db_id: str):
                             raise RuntimeError(f"Backup failed with exit code {p_rc}: {log_output}")
 
             elif db.engine == "mongodb":
-                uri = f"mongodb://{db.username}:{db.password}@{db.host}:{db.port}/{db.database_name}?authSource=admin"
-                cmd = ["mongodump", f"--uri={uri}", f"--archive={tmp_path}"]
+                uri = f"mongodb://{db.username}:<REDACTED>@{db.host}:{db.port}/{db.database_name}?authSource=admin"
+                logger.debug(f"Executing mongodump with URI: {uri}")
+
+                uri_with_pass = f"mongodb://{db.username}:{db.password}@{db.host}:{db.port}/{db.database_name}?authSource=admin"
+                cmd = ["mongodump", f"--uri={uri_with_pass}", f"--archive={tmp_path}"]
                 if db.compression == "gzip":
                     cmd.append("--gzip")
 
@@ -114,11 +127,13 @@ def run_backup(backup_id: str, db_id: str):
 
         except Exception as e:
             error_str = str(e)
+            logger.error(f"Backup failed for db '{db.name}': {error_str}", exc_info=True)
             backup.log = error_str
             backup.error_summary = parse_backup_error(error_str, db.engine)
 
         finally:
             if os.path.exists(tmp_path):
+                logger.debug(f"Removing temporary file: {tmp_path}")
                 os.remove(tmp_path)
 
             duration = time.time() - start_time
@@ -127,6 +142,8 @@ def run_backup(backup_id: str, db_id: str):
 
             session.add(backup)
             session.commit()
+
+            logger.info(f"Backup run finished for backup_id: {backup_id}. Status: {status}. Duration: {duration:.2f}s")
 
             BACKUPS_TOTAL.labels(database_name=db.name, status=status).inc()
             BACKUP_DURATION_SECONDS.labels(database_name=db.name).observe(duration)
@@ -155,6 +172,7 @@ def create_and_run_backup_sync(db: Database, session: Session) -> Backup:
     """
     Creates, runs, and returns a backup synchronously.
     """
+    logger.info(f"Creating on-demand backup for database: {db.name}")
     new_backup = Backup(database_id=db.id, type="on-demand")
     session.add(new_backup)
     session.commit()
@@ -168,24 +186,27 @@ def create_and_run_backup_sync(db: Database, session: Session) -> Backup:
 
 
 def delete_backup(backup_id: str) -> bool:
+    logger.info(f"Attempting to delete backup_id: {backup_id}")
     with Session(engine) as session:
         backup = session.get(Backup, backup_id)
         if not backup:
+            logger.warning(f"Backup not found for backup_id: {backup_id}")
             return False
 
         db = session.get(Database, backup.database_id)
         if not db:
-            # This case should ideally not happen if data integrity is maintained
+            logger.error(f"Database not found for backup_id: {backup_id}, database_id: {backup.database_id}")
             return False
 
         if backup.storage_path:
+            logger.debug(f"Deleting backup file from storage: {backup.storage_path}")
             if not storage.delete(backup.storage_path):
-                # If storage deletion fails, we abort the operation
-                # to avoid leaving an orphaned database record.
+                logger.error(f"Failed to delete backup file from storage: {backup.storage_path}")
                 return False
 
         session.delete(backup)
         session.commit()
 
+        logger.info(f"Successfully deleted backup_id: {backup_id}")
         BACKUPS_DELETED_TOTAL.labels(database_name=db.name).inc()
         return True
