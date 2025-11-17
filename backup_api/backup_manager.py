@@ -17,6 +17,7 @@ from .storage import get_storage_provider
 from .config import load_config
 from .error_parser import parse_backup_error
 from .logger import get_logger
+from .utils import sanitize_filename
 
 logger = get_logger(__name__)
 
@@ -36,13 +37,14 @@ def run_backup(backup_id: str, db_id: str):
 
         logger.debug(f"Database details: host={db.host}, port={db.port}, user={db.username}, db_name={db.database_name}")
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        sanitized_db_name = sanitize_filename(db.name)
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
         file_extension = ".sql" if db.engine == "postgres" else ".archive"
         if db.compression == "gzip":
             file_extension += ".gz"
 
-        filename = f"{db.engine}_{db.database_name}_{timestamp}{file_extension}"
-        storage_path = os.path.join("backups", filename)
+        filename = f"{sanitized_db_name}_{timestamp}{file_extension}"
+        storage_path = os.path.join("backups", sanitized_db_name, filename)
         logger.info(f"Backup filename: {filename}, storage_path: {storage_path}")
         status = "failed"
 

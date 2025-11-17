@@ -57,7 +57,7 @@ def create_package(session: Session, compression: str = "zip"):
             backup_files_to_pack.append(local_backup_path)
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        package_name = f"packaged_database_{timestamp}"
+        package_name = f"paquete-backups_{timestamp}"
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp_package_file:
             package_tmp_path = tmp_package_file.name
