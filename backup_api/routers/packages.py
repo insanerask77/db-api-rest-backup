@@ -41,7 +41,9 @@ def delete_package(package_id: str, session: Session = Depends(get_session)):
     pkg = session.get(Package, package_id)
     if pkg:
         size_bytes = pkg.size_bytes
-        storage.delete(pkg.storage_path)
+        if not storage.delete(pkg.storage_path):
+            raise HTTPException(status_code=502, detail="Failed to delete package from storage")
+
         session.delete(pkg)
         session.commit()
         PACKAGES_TOTAL.dec()
@@ -54,9 +56,12 @@ def delete_all_packages(session: Session = Depends(get_session)):
     total_size = 0
     count = 0
     for pkg in packages:
+        if not storage.delete(pkg.storage_path):
+            session.rollback()
+            raise HTTPException(status_code=502, detail=f"Failed to delete package {pkg.storage_path} from storage")
+
         total_size += pkg.size_bytes
         count += 1
-        storage.delete(pkg.storage_path)
         session.delete(pkg)
     session.commit()
     PACKAGES_TOTAL.dec(count)

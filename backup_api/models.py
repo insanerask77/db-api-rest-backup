@@ -37,3 +37,4 @@ class Backup(SQLModel, table=True):
     storage_path: Optional[str] = None
     checksum: Optional[str] = None
     log: Optional[str] = None
+    error_summary: Optional[str] = None

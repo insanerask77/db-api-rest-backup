@@ -15,6 +15,7 @@ from .metrics import (
 )
 from .storage import get_storage_provider
 from .config import load_config
+from .error_parser import parse_backup_error
 
 config = load_config()
 storage = get_storage_provider(config)
@@ -112,9 +113,9 @@ def run_backup(backup_id: str, db_id: str):
             backup.log = log_output
 
         except Exception as e:
-            backup.log = str(e)
-            if log_output:
-                backup.log += f"\nProcess stderr:\n{log_output}"
+            error_str = str(e)
+            backup.log = error_str
+            backup.error_summary = parse_backup_error(error_str, db.engine)
 
         finally:
             if os.path.exists(tmp_path):
@@ -174,10 +175,14 @@ def delete_backup(backup_id: str) -> bool:
 
         db = session.get(Database, backup.database_id)
         if not db:
+            # This case should ideally not happen if data integrity is maintained
             return False
 
         if backup.storage_path:
-            storage.delete(backup.storage_path)
+            if not storage.delete(backup.storage_path):
+                # If storage deletion fails, we abort the operation
+                # to avoid leaving an orphaned database record.
+                return False
 
         session.delete(backup)
         session.commit()
