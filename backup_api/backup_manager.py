@@ -151,10 +151,14 @@ def delete_backup(backup_id: str) -> bool:
 
         db = session.get(Database, backup.database_id)
         if not db:
+            # This case should ideally not happen if data integrity is maintained
             return False
 
         if backup.storage_path:
-            storage.delete(backup.storage_path)
+            if not storage.delete(backup.storage_path):
+                # If storage deletion fails, we abort the operation
+                # to avoid leaving an orphaned database record.
+                return False
 
         session.delete(backup)
         session.commit()

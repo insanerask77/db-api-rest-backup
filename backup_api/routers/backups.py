@@ -44,7 +44,7 @@ def get_backup_details(backup_id: str, session: Session = Depends(get_session)):
 @router.delete("/{backup_id}", status_code=204)
 def delete_backup(backup_id: str):
     if not backup_manager.delete_backup(backup_id):
-        raise HTTPException(status_code=404, detail="Backup not found")
+        raise HTTPException(status_code=502, detail="Failed to delete backup")
     return
 
 

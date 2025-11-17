@@ -12,7 +12,7 @@ class StorageProvider(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def delete(self, file_path: str) -> None:
+    def delete(self, file_path: str) -> bool:
         pass
 
     @abc.abstractmethod
@@ -34,10 +34,15 @@ class LocalStorage(StorageProvider):
         os.makedirs(os.path.dirname(final_destination), exist_ok=True)
         os.rename(source_path, final_destination)
 
-    def delete(self, file_path: str) -> None:
+    def delete(self, file_path: str) -> bool:
         full_path = os.path.join(self.base_path, file_path)
         if os.path.exists(full_path):
-            os.remove(full_path)
+            try:
+                os.remove(full_path)
+                return True
+            except OSError:
+                return False
+        return True
 
     def get_download_response(self, file_path: str) -> FileResponse:
         full_path = os.path.join(self.base_path, file_path)
@@ -73,8 +78,13 @@ class S3Storage(StorageProvider):
     def save(self, source_path: str, destination_path: str) -> None:
         self.s3_client.upload_file(source_path, self.bucket, destination_path)
 
-    def delete(self, file_path: str) -> None:
-        self.s3_client.delete_object(Bucket=self.bucket, Key=file_path)
+    def delete(self, file_path: str) -> bool:
+        try:
+            self.s3_client.delete_object(Bucket=self.bucket, Key=file_path)
+            return True
+        except ClientError as e:
+            print(f"Failed to delete {file_path} from S3: {e}")
+            return False
 
     def get_download_response(self, file_path: str) -> RedirectResponse:
         url = self.s3_client.generate_presigned_url(
