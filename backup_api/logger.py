@@ -48,6 +48,10 @@ def setup_logging():
     app_logger = logging.getLogger("backup_api")
     app_logger.setLevel(log_level)
 
+    # Reduce verbosity of SQLAlchemy logs unless in DEBUG mode
+    if log_level != "DEBUG":
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
     logging.info(f"Logging configured with level {log_level}")
 
 def get_logger(name: str) -> logging.Logger:
