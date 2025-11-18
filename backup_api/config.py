@@ -1,28 +1,71 @@
 import yaml
 import os
 from sqlmodel import Session, select
-from .models import Database
+from .models import Database, PackageConfig
 from .logger import get_logger
 
 logger = get_logger(__name__)
 
 
-def load_config():
+def load_config(session: Session):
+    # 1. Try to load package config from DB
+    package_config_db = session.get(PackageConfig, 1)
+    if package_config_db and package_config_db.override_static_config:
+        logger.info("Loading package configuration from database.")
+        package_conf = {
+            "schedule": package_config_db.schedule,
+            "compression": package_config_db.compression,
+            "retention_days": package_config_db.retention_days,
+        }
+    else:
+        package_conf = None
+
+    # 2. Load config from YAML file
     config_path = "config.yaml"
     if not os.path.exists(config_path):
+        if package_conf is not None:
+            return {"package-conf": package_conf}
         return {}
+
     with open(config_path, "r") as f:
         try:
-            return yaml.safe_load(f)
+            yaml_config = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             logger.error(f"Error parsing config.yaml: {e}")
-            return {}
+            yaml_config = {}
+
+    # 3. Merge configs, giving priority to DB config if it exists
+    if package_conf is not None:
+        yaml_config["package-conf"] = package_conf
+    elif "package-conf" in yaml_config and package_config_db:
+        # If DB exists but is not overridden, sync YAML to DB
+        logger.info("Syncing package configuration from config.yaml to database.")
+        conf_from_yaml = yaml_config.get("package-conf", {})
+        package_config_db.schedule = conf_from_yaml.get("schedule")
+        package_config_db.compression = conf_from_yaml.get("compression", "zip")
+        package_config_db.retention_days = conf_from_yaml.get("retention_days")
+        session.add(package_config_db)
+        session.commit()
+    elif "package-conf" in yaml_config and not package_config_db:
+        # If DB entry doesn't exist, create it from YAML
+        logger.info("Creating initial package configuration in database from config.yaml.")
+        conf_from_yaml = yaml_config.get("package-conf", {})
+        new_package_conf = PackageConfig(
+            id=1,
+            schedule=conf_from_yaml.get("schedule"),
+            compression=conf_from_yaml.get("compression", "zip"),
+            retention_days=conf_from_yaml.get("retention_days"),
+            override_static_config=False
+        )
+        session.add(new_package_conf)
+        session.commit()
+
+    return yaml_config
 
 
-def load_and_sync_databases(session: Session):
-    config_data = load_config()
+def load_and_sync_databases(session: Session, config_data: dict):
     if not config_data:
-        logger.info("No config.yaml found or it's empty, skipping predefined databases.")
+        logger.info("No config data provided, skipping predefined databases.")
         return
 
     try:

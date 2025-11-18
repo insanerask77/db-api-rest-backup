@@ -4,11 +4,13 @@ import os
 import shutil
 import tempfile
 from starlette.background import BackgroundTask
+from fastapi import Depends
 from fastapi.responses import FileResponse, RedirectResponse
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
 from .logger import get_logger
+from .dependencies import get_settings
 
 logger = get_logger(__name__)
 
@@ -115,10 +117,10 @@ class S3Storage(StorageProvider):
 
 _storage_provider: StorageProvider = None
 
-def get_storage_provider(config: dict) -> StorageProvider:
+def get_storage_provider(settings: dict = Depends(get_settings)) -> StorageProvider:
     global _storage_provider
     if _storage_provider is None:
-        storage_config = config.get('storage', {'type': 'local'})
+        storage_config = settings.get('storage', {'type': 'local'})
         if storage_config['type'] == 's3':
             _storage_provider = S3Storage(**storage_config['s3'])
         else:
