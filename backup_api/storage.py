@@ -1,6 +1,9 @@
 # backup_api/storage.py
 import abc
 import os
+import shutil
+import tempfile
+from starlette.background import BackgroundTask
 from fastapi.responses import FileResponse, RedirectResponse
 import boto3
 from botocore.client import Config
@@ -36,7 +39,7 @@ class LocalStorage(StorageProvider):
     def save(self, source_path: str, destination_path: str) -> None:
         final_destination = os.path.join(self.base_path, destination_path)
         os.makedirs(os.path.dirname(final_destination), exist_ok=True)
-        os.rename(source_path, final_destination)
+        shutil.move(source_path, final_destination)
 
     def delete(self, file_path: str) -> bool:
         full_path = os.path.join(self.base_path, file_path)
@@ -90,13 +93,21 @@ class S3Storage(StorageProvider):
             logger.error(f"Failed to delete {file_path} from S3: {e}")
             return False
 
-    def get_download_response(self, file_path: str) -> RedirectResponse:
-        url = self.s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': self.bucket, 'Key': file_path},
-            ExpiresIn=3600  # 1 hour
-        )
-        return RedirectResponse(url=url)
+    def get_download_response(self, file_path: str) -> FileResponse:
+        # Create a temporary file to download the object to
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            temp_path = tmp_file.name
+            self.s3_client.download_file(self.bucket, file_path, temp_path)
+
+            # Create a background task to clean up the temp file
+            cleanup_task = BackgroundTask(os.remove, temp_path)
+
+            # Return a FileResponse, which will stream the file and then run the cleanup
+            return FileResponse(
+                path=temp_path,
+                filename=os.path.basename(file_path),
+                background=cleanup_task
+            )
 
     def download_file(self, file_path: str, destination_path: str) -> None:
         self.s3_client.download_file(self.bucket, file_path, destination_path)
