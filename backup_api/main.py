@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from sqlmodel import Session
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy import inspect, text
 
 from . import config
 from .database import create_db_and_tables, engine
@@ -16,9 +17,41 @@ Instrumentator().instrument(app).expose(app)
 
 import yaml
 
+def run_db_migrations():
+    """
+    Checks for and applies necessary database schema migrations.
+    This is a simple migration helper for a small project without Alembic.
+    """
+    logger.info("Checking for database migrations...")
+    try:
+        with engine.connect() as connection:
+            inspector = inspect(engine)
+
+            # --- Migration for 'trigger_mode' in 'backup' table ---
+            backup_columns = [c['name'] for c in inspector.get_columns('backup')]
+            if 'trigger_mode' not in backup_columns:
+                logger.info("Migration: Adding 'trigger_mode' column to 'backup' table.")
+                with connection.begin():
+                    connection.execute(text("ALTER TABLE backup ADD COLUMN trigger_mode VARCHAR(255) DEFAULT 'scheduled'"))
+                    connection.execute(text("CREATE INDEX ix_backup_trigger_mode ON backup (trigger_mode)"))
+
+            # --- Migration for 'trigger_mode' in 'package' table ---
+            package_columns = [c['name'] for c in inspector.get_columns('package')]
+            if 'trigger_mode' not in package_columns:
+                logger.info("Migration: Adding 'trigger_mode' column to 'package' table.")
+                with connection.begin():
+                    connection.execute(text("ALTER TABLE package ADD COLUMN trigger_mode VARCHAR(255) DEFAULT 'scheduled'"))
+                    connection.execute(text("CREATE INDEX ix_package_trigger_mode ON package (trigger_mode)"))
+        logger.info("Database migration check complete.")
+    except Exception as e:
+        logger.error(f"An error occurred during database migration: {e}", exc_info=True)
+        # Depending on the severity, you might want to exit the application
+        raise e
+
 @app.on_event("startup")
 def startup_event():
     create_db_and_tables()
+    run_db_migrations()
 
     global_conf = {}
     package_conf = {}

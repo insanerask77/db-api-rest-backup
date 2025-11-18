@@ -24,7 +24,7 @@ def create_backup(backup_req: BackupCreate, background_tasks: BackgroundTasks, s
         raise HTTPException(status_code=404, detail="Database not found")
 
     logger.debug(f"Creating '{database.engine}' backup entry for database '{database.name}'")
-    new_backup = Backup(database_id=database.id, type=database.engine)
+    new_backup = Backup(database_id=database.id, type=database.engine, trigger_mode="manual")
     session.add(new_backup)
     session.commit()
     session.refresh(new_backup)

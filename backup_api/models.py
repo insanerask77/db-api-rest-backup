@@ -27,6 +27,8 @@ class Package(SQLModel, table=True):
     storage_path: str
     size_bytes: int
     checksum: str
+    trigger_mode: str = Field(default="scheduled", index=True)
+
 
 class Backup(SQLModel, table=True):
     id: str = Field(default_factory=lambda: f"bkp_{uuid.uuid4().hex[:6]}", primary_key=True)
@@ -40,3 +42,4 @@ class Backup(SQLModel, table=True):
     checksum: Optional[str] = None
     log: Optional[str] = None
     error_summary: Optional[str] = None
+    trigger_mode: str = Field(default="scheduled", index=True)

@@ -136,7 +136,7 @@ def trigger_package_creation(compression: str = None, session: Session = Depends
             comp_to_use = compression or package_conf.get("compression", "zip")
             logger.debug(f"Using compression: {comp_to_use}")
 
-            create_package(session, comp_to_use)
+            create_package(session, comp_to_use, trigger_mode="manual")
             return {"message": "Package creation triggered."}
 
     except FileNotFoundError:

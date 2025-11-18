@@ -48,6 +48,7 @@ class PackageBase(BaseModel):
 class PackageList(PackageBase):
     id: str
     created_at: datetime
+    trigger_mode: str
 
     class Config:
         from_attributes = True
@@ -55,6 +56,7 @@ class PackageList(PackageBase):
 class PackageDetail(PackageBase):
     id: str
     created_at: datetime
+    trigger_mode: str
 
     class Config:
         from_attributes = True
@@ -76,6 +78,7 @@ class BackupList(BaseModel):
     started_at: datetime
     finished_at: Optional[datetime] = None
     checksum: Optional[str] = None
+    trigger_mode: str
 
     class Config:
         from_attributes = True
@@ -86,6 +89,7 @@ class BackupDetail(BaseModel):
     size_bytes: Optional[int] = None
     storage_path: Optional[str] = None
     log: Optional[str] = None
+    trigger_mode: str
 
     class Config:
         from_attributes = True
