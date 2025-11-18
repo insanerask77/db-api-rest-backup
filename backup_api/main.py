@@ -8,6 +8,7 @@ from .database import create_db_and_tables, engine
 from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs, initialize_metrics, configure_scheduler
 from .routers import databases, backups, packages, system
 from .logger import setup_logging, get_logger
+from .storage import initialize_storage_provider
 
 setup_logging()
 logger = get_logger(__name__)
@@ -58,6 +59,9 @@ def startup_event():
         settings = config.load_config(session)
         app.state.settings = settings
         config.load_and_sync_databases(session, settings)
+
+        # Initialize storage provider
+        initialize_storage_provider(settings)
 
         # Extract specific configurations
         global_conf = app.state.settings.get("global", {})
