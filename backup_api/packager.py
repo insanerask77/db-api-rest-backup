@@ -84,7 +84,8 @@ def create_package(session: Session, compression: str = "zip", trigger_mode: str
             checksum = hashlib.md5(f.read()).hexdigest()
 
         storage.save(source_path=package_tmp_path, destination_path=package_storage_path)
-        os.remove(package_tmp_path)
+        if os.path.exists(package_tmp_path):
+            os.remove(package_tmp_path)
 
         new_package = Package(
             storage_path=package_storage_path,
