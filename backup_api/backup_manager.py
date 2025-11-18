@@ -39,11 +39,12 @@ def run_backup(backup_id: str, db_id: str):
 
         sanitized_db_name = sanitize_filename(db.name)
         timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+        manual_suffix = "_manual" if backup.trigger_mode == "manual" else ""
         file_extension = ".sql" if db.engine == "postgres" else ".archive"
         if db.compression == "gzip":
             file_extension += ".gz"
 
-        filename = f"{sanitized_db_name}_{timestamp}{file_extension}"
+        filename = f"{sanitized_db_name}_{timestamp}{manual_suffix}{file_extension}"
         storage_path = os.path.join("backups", sanitized_db_name, filename)
         logger.info(f"Backup filename: {filename}, storage_path: {storage_path}")
         status = "failed"
@@ -170,12 +171,12 @@ def run_backup(backup_id: str, db_id: str):
                 BACKUP_LAST_INTEGRITY_STATUS.labels(database_name=db.name).set(0)
 
 
-def create_and_run_backup_sync(db: Database, session: Session) -> Backup:
+def create_and_run_backup_sync(db: Database, session: Session, trigger_mode: str = "manual") -> Backup:
     """
     Creates, runs, and returns a backup synchronously.
     """
     logger.info(f"Creating on-demand backup for database: {db.name}")
-    new_backup = Backup(database_id=db.id, type="on-demand")
+    new_backup = Backup(database_id=db.id, type=db.engine, trigger_mode=trigger_mode)
     session.add(new_backup)
     session.commit()
     session.refresh(new_backup)

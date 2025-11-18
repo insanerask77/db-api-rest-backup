@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 config = load_config()
 storage = get_storage_provider(config)
 
-def create_package(session: Session, compression: str = "zip"):
+def create_package(session: Session, compression: str = "zip", trigger_mode: str = "scheduled"):
     """
     Finds all databases marked for packaging, gathers their latest backups,
     and compresses them into a single package file.
@@ -45,7 +45,8 @@ def create_package(session: Session, compression: str = "zip"):
             if not latest_backup:
                 logger.info(f"No backup found for '{db.name}'. Triggering a new one.")
                 try:
-                    latest_backup = create_and_run_backup_sync(db, session)
+                    # Propagate the trigger mode to on-the-fly backups
+                    latest_backup = create_and_run_backup_sync(db, session, trigger_mode=trigger_mode)
                     if not latest_backup or latest_backup.status != "completed":
                         raise Exception("Newly created backup failed.")
                 except Exception as e:
@@ -57,7 +58,8 @@ def create_package(session: Session, compression: str = "zip"):
             backup_files_to_pack.append(local_backup_path)
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        package_name = f"paquete-backups_{timestamp}"
+        manual_suffix = "_manual" if trigger_mode == "manual" else ""
+        package_name = f"paquete-backups_{timestamp}{manual_suffix}"
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp_package_file:
             package_tmp_path = tmp_package_file.name
@@ -87,7 +89,8 @@ def create_package(session: Session, compression: str = "zip"):
         new_package = Package(
             storage_path=package_storage_path,
             size_bytes=size_bytes,
-            checksum=checksum
+            checksum=checksum,
+            trigger_mode=trigger_mode
         )
         session.add(new_package)
         session.commit()

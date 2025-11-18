@@ -39,7 +39,7 @@ def trigger_scheduled_backup(db_id: str):
         if db:
             logger.info(f"Triggering scheduled backup for database: {db.name}")
             logger.debug(f"Creating new backup entry for db_id: {db_id}")
-            new_backup = Backup(database_id=db.id, type="scheduled")
+            new_backup = Backup(database_id=db.id, type=db.engine, trigger_mode="scheduled")
             session.add(new_backup)
             session.commit()
             session.refresh(new_backup)
@@ -157,7 +157,7 @@ def schedule_package_creation(package_conf):
 
     def job_wrapper():
         with Session(engine) as session:
-            create_package(session, package_conf.get('compression', 'zip'))
+            create_package(session, package_conf.get('compression', 'zip'), trigger_mode="scheduled")
             enforce_package_retention(session, package_conf)
 
     scheduler.add_job(
