@@ -12,17 +12,17 @@ from .models import Database, Backup, Package
 from .backup_manager import create_and_run_backup_sync
 from .metrics import PACKAGE_LAST_STATUS, PACKAGES_TOTAL, PACKAGES_SIZE_BYTES
 from .storage import get_storage_provider
-from .config import load_config
+from .logger import get_logger
 
-logger = logging.getLogger(__name__)
-config = load_config()
-storage = get_storage_provider(config)
+logger = get_logger(__name__)
+
 
 def create_package(session: Session, compression: str = "zip", trigger_mode: str = "scheduled"):
     """
     Finds all databases marked for packaging, gathers their latest backups,
     and compresses them into a single package file.
     """
+    storage = get_storage_provider()
     PACKAGE_LAST_STATUS.set(0)
 
     tmp_dir = tempfile.mkdtemp()
@@ -84,7 +84,8 @@ def create_package(session: Session, compression: str = "zip", trigger_mode: str
             checksum = hashlib.md5(f.read()).hexdigest()
 
         storage.save(source_path=package_tmp_path, destination_path=package_storage_path)
-        os.remove(package_tmp_path)
+        if os.path.exists(package_tmp_path):
+            os.remove(package_tmp_path)
 
         new_package = Package(
             storage_path=package_storage_path,

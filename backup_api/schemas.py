@@ -40,6 +40,12 @@ class DatabaseDetail(DatabaseBase):
     class Config:
         from_attributes = True
 
+
+class PackageConfigUpdate(BaseModel):
+    schedule: Optional[str] = None
+    compression: Optional[str] = None
+    retention_days: Optional[int] = None
+
 class PackageBase(BaseModel):
     storage_path: str
     size_bytes: int

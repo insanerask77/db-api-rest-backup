@@ -14,18 +14,16 @@ from .metrics import (
     BACKUP_TRANSFER_SPEED_BYTES_PER_SECOND, BACKUP_LAST_INTEGRITY_STATUS
 )
 from .storage import get_storage_provider
-from .config import load_config
 from .error_parser import parse_backup_error
 from .logger import get_logger
 from .utils import sanitize_filename
 
 logger = get_logger(__name__)
 
-config = load_config()
-storage = get_storage_provider(config)
 
 def run_backup(backup_id: str, db_id: str):
     logger.info(f"Starting backup run for backup_id: {backup_id}, db_id: {db_id}")
+    storage = get_storage_provider()
     start_time = time.time()
     with Session(engine) as session:
         backup = session.get(Backup, backup_id)
@@ -190,6 +188,7 @@ def create_and_run_backup_sync(db: Database, session: Session, trigger_mode: str
 
 def delete_backup(backup_id: str) -> bool:
     logger.info(f"Attempting to delete backup_id: {backup_id}")
+    storage = get_storage_provider()
     with Session(engine) as session:
         backup = session.get(Backup, backup_id)
         if not backup:

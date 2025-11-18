@@ -43,3 +43,11 @@ class Backup(SQLModel, table=True):
     log: Optional[str] = None
     error_summary: Optional[str] = None
     trigger_mode: str = Field(default="scheduled", index=True)
+
+
+class PackageConfig(SQLModel, table=True):
+    id: int = Field(default=1, primary_key=True)
+    schedule: Optional[str] = None
+    compression: str = "zip"
+    retention_days: Optional[int] = None
+    override_static_config: bool = Field(default=False)

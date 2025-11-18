@@ -8,6 +8,7 @@ from .database import create_db_and_tables, engine
 from .scheduler import scheduler, schedule_database_backups, schedule_system_jobs, initialize_metrics, configure_scheduler
 from .routers import databases, backups, packages, system
 from .logger import setup_logging, get_logger
+from .storage import initialize_storage_provider
 
 setup_logging()
 logger = get_logger(__name__)
@@ -15,7 +16,6 @@ logger = get_logger(__name__)
 app = FastAPI()
 Instrumentator().instrument(app).expose(app)
 
-import yaml
 
 def run_db_migrations():
     """
@@ -48,37 +48,39 @@ def run_db_migrations():
         # Depending on the severity, you might want to exit the application
         raise e
 
+
 @app.on_event("startup")
 def startup_event():
     create_db_and_tables()
     run_db_migrations()
 
-    global_conf = {}
-    package_conf = {}
-    try:
-        with open("config.yaml", "r") as f:
-            config_data = yaml.safe_load(f)
-            global_conf = config_data.get("global", {})
-            package_conf = config_data.get("package-conf", {})
-    except FileNotFoundError:
-        logger.info("No config.yaml found, skipping configuration.")
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing config.yaml: {e}")
-
     with Session(engine) as session:
-        config.load_and_sync_databases(session)
+        # Load and sync all configurations
+        settings = config.load_config(session)
+        app.state.settings = settings
+        config.load_and_sync_databases(session, settings)
 
-    max_workers = global_conf.get("max_parallel_jobs", 10)
-    configure_scheduler(max_workers=max_workers)
+        # Initialize storage provider
+        initialize_storage_provider(settings)
 
-    scheduler.start()
-    schedule_database_backups()
-    schedule_system_jobs(package_conf)
-    initialize_metrics()
+        # Extract specific configurations
+        global_conf = app.state.settings.get("global", {})
+        package_conf = app.state.settings.get("package-conf", {})
+
+        # Configure and start scheduler
+        max_workers = global_conf.get("max_parallel_jobs", 10)
+        configure_scheduler(max_workers=max_workers)
+
+        scheduler.start()
+        schedule_database_backups()
+        schedule_system_jobs(package_conf)
+        initialize_metrics()
+
 
 @app.on_event("shutdown")
 def shutdown_event():
     scheduler.shutdown()
+
 
 app.include_router(databases.router, prefix="/databases", tags=["databases"])
 app.include_router(backups.router, prefix="/backups", tags=["backups"])

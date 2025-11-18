@@ -94,15 +94,10 @@ class S3Storage(StorageProvider):
             return False
 
     def get_download_response(self, file_path: str) -> FileResponse:
-        # Create a temporary file to download the object to
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             temp_path = tmp_file.name
             self.s3_client.download_file(self.bucket, file_path, temp_path)
-
-            # Create a background task to clean up the temp file
             cleanup_task = BackgroundTask(os.remove, temp_path)
-
-            # Return a FileResponse, which will stream the file and then run the cleanup
             return FileResponse(
                 path=temp_path,
                 filename=os.path.basename(file_path),
@@ -115,12 +110,19 @@ class S3Storage(StorageProvider):
 
 _storage_provider: StorageProvider = None
 
-def get_storage_provider(config: dict) -> StorageProvider:
+
+def initialize_storage_provider(settings: dict):
     global _storage_provider
     if _storage_provider is None:
-        storage_config = config.get('storage', {'type': 'local'})
+        storage_config = settings.get('storage', {'type': 'local'})
         if storage_config['type'] == 's3':
             _storage_provider = S3Storage(**storage_config['s3'])
         else:
             _storage_provider = LocalStorage(base_path='data')
+        logger.info(f"Storage provider initialized: {storage_config['type']}")
+
+
+def get_storage_provider() -> StorageProvider:
+    if _storage_provider is None:
+        raise RuntimeError("Storage provider has not been initialized.")
     return _storage_provider
