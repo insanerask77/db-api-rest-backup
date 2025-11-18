@@ -15,7 +15,6 @@ from .metrics import (
     BACKUP_LAST_STATUS
 )
 from .storage import get_storage_provider
-from .config import load_config
 from .logger import get_logger
 
 from apscheduler.executors.pool import ThreadPoolExecutor
@@ -24,14 +23,14 @@ logger = get_logger(__name__)
 
 # This will be configured in main.py
 scheduler = BackgroundScheduler()
-config = load_config()
-storage = get_storage_provider(config)
+
 
 def configure_scheduler(max_workers=10):
     executors = {
         'default': ThreadPoolExecutor(max_workers)
     }
     scheduler.configure(executors=executors)
+
 
 def trigger_scheduled_backup(db_id: str):
     with Session(engine) as session:
@@ -44,6 +43,7 @@ def trigger_scheduled_backup(db_id: str):
             session.commit()
             session.refresh(new_backup)
             run_backup(new_backup.id, db.id)
+
 
 def schedule_database_backups():
     with Session(engine) as session:
@@ -66,7 +66,9 @@ def schedule_database_backups():
                 scheduler.remove_job(job_id)
                 logger.info(f"Removed backup schedule for '{db.name}'.")
 
+
 def enforce_retention(database_id: Optional[str] = None):
+    storage = get_storage_provider()
     with Session(engine) as session:
         logger.info(f"Running retention policy for database_id: {database_id or 'all'}")
 
@@ -84,7 +86,6 @@ def enforce_retention(database_id: Optional[str] = None):
             files_deleted_count = 0
 
             # Cleanup for orphaned failed backups
-            # These are backups that were uploaded but failed to record metadata correctly.
             failed_cutoff_date = now - timedelta(days=db.retention_days or 7)
             orphaned_backups = session.exec(
                 select(Backup).where(
@@ -143,6 +144,7 @@ def enforce_retention(database_id: Optional[str] = None):
             if files_deleted_count > 0:
                 RETENTION_FILES_DELETED_TOTAL.labels(database_name=db.name).inc(files_deleted_count)
 
+
 def schedule_system_jobs(package_conf=None):
     scheduler.add_job(enforce_retention, "cron", hour=1, id="retention_policy_job", name="Enforce Retention Policies", replace_existing=True)
 
@@ -150,6 +152,7 @@ def schedule_system_jobs(package_conf=None):
         schedule_package_creation(package_conf)
 
     logger.info("Scheduled system jobs (retention, metrics, and packaging).")
+
 
 def schedule_package_creation(package_conf):
     job_id = "package_creation_job"
@@ -169,7 +172,9 @@ def schedule_package_creation(package_conf):
     )
     logger.info(f"Scheduled package creation with schedule: '{package_conf['schedule']}'")
 
+
 def enforce_package_retention(session: Session, package_conf):
+    storage = get_storage_provider()
     logger.info("Running package retention policy.")
 
     retention_days = package_conf.get('retention_days')
@@ -197,6 +202,7 @@ def enforce_package_retention(session: Session, package_conf):
                 logger.info(f"Deleted old package '{pkg.id}' (count policy).")
 
     session.commit()
+
 
 def initialize_metrics():
     with Session(engine) as session:
